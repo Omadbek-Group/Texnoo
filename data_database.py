@@ -961,6 +961,32 @@ def authenticate_user(identifier: str, password: str) -> Optional[dict[str, Any]
     return None
 
 
+def get_auth_record(role: str, legacy_id: Any) -> Optional[dict[str, Any]]:
+    """Account fields needed to authorize a request (SQLite is the primary store)."""
+    role = str(role or "").strip().lower()
+    try:
+        legacy_id = int(legacy_id or 0)
+    except (TypeError, ValueError):
+        return None
+    if role not in _USER_ROLES or not legacy_id:
+        return None
+    init_sqlite_db()
+    with _get_sqlite_connection() as conn:
+        row = conn.execute(
+            "SELECT name, phone, status, password_hash, meta_json FROM users WHERE role = ? AND legacy_id = ?",
+            (role, legacy_id),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "name": row["name"] or "",
+        "phone": row["phone"] or "",
+        "status": row["status"] or "active",
+        "password_hash": str(row["password_hash"] or ""),
+        "meta": _json_loads(row["meta_json"], {}),
+    }
+
+
 def update_user_password(role: str, legacy_id: int, old_password: str, new_password: str) -> bool:
     role = str(role or "").strip().lower()
     if role not in _USER_ROLES:
