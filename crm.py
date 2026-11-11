@@ -112,6 +112,9 @@ def _public(s: dict[str, Any], balance: Optional[dict[str, int]] = None) -> dict
         "phone": s.get("phone") or "",
         "parentPhone": s.get("parentPhone") or "",
         "group": s.get("group") or "",
+        "extraGroups": [str(x) for x in s.get("extraGroups") or []] if isinstance(s.get("extraGroups"), list) else [],
+        "birthDate": s.get("birthDate") or "",
+        "address": s.get("address") or "",
         "status": student_status(s),
         "teacherId": s.get("teacherId"),
         **(balance or {"charged": 0, "paid": 0, "debt": 0, "monthly_fee": 0}),
@@ -203,7 +206,25 @@ def history(student_id: int):
         fees = _all(conn, "SELECT monthly_fee, effective_from, created_by_name, created_at FROM fin_fees WHERE center_id = ? AND student_id = ? ORDER BY created_at DESC",
                     (p["center"], student_id))
         balance = _balances(conn, p["center"], [student_id])[student_id]
-    return jsonify({"ok": True, "student": _public(student, balance), "events": events, "payments": payments, "fees": fees})
+        att = _all(conn, "SELECT lesson_date, group_name, status FROM att_records WHERE center_id = ? AND student_id = ? ORDER BY lesson_date DESC",
+                   (p["center"], student_id))
+    data = _dataset["read"]()
+    teachers = {int(t.get("id") or 0): str(t.get("name") or "") for t in data.get("teachers", []) if isinstance(t, dict)}
+    tids = {int(x) for x in (student.get("teacherIds") or []) if str(x).isdigit()} | ({int(student["teacherId"])} if str(student.get("teacherId") or "").isdigit() else set())
+    tests = {str(t.get("id")): t.get("title") or "" for t in data.get("tests", []) if isinstance(t, dict)}
+    results = [{"test": tests.get(str(r.get("testId")), "Test"), "correct": r.get("correct"), "total": r.get("total"), "date": r.get("date")}
+               for r in data.get("testResults", []) if isinstance(r, dict) and str(r.get("studentId")) == str(student_id)]
+    grades = [gr for gr in data.get("homeworkGrades", []) if isinstance(gr, dict) and str(gr.get("studentId")) == str(student_id)]
+    att_counts = {k: sum(1 for a in att if a["status"] == k) for k in ("present", "late", "excused", "absent")}
+    total = sum(att_counts.values())
+    return jsonify({"ok": True, "student": _public(student, balance), "events": events, "payments": payments, "fees": fees,
+                    "teachers": [teachers.get(t, f"#{t}") for t in sorted(tids) if t in teachers],
+                    "attendance": {**att_counts, "total": total,
+                                   "rate": round((att_counts["present"] + att_counts["late"]) * 100 / total) if total else None,
+                                   "recent": att[:10]},
+                    "tests": sorted(results, key=lambda r: -(r["date"] or 0))[:20],
+                    "homework": {"graded": len(grades),
+                                 "avg": round(sum(float(x.get("grade") or 0) for x in grades) / len(grades), 1) if grades else None}})
 
 
 # --------------------------------------------------------------------------
@@ -247,6 +268,9 @@ def create_student():
         return _err("Guruhni tanlang")
     if password and not 4 <= len(password) <= 128:
         return _err("Parol kamida 4 belgi bo'lsin")
+    birth, address = _birth_date(body.get("birthDate")), _text(body.get("address"), 200)
+    if birth is None:
+        return _err("Tug'ilgan sana noto'g'ri (YYYY-MM-DD)")
     start = _effective_date(body.get("start_date"))
     if not start:
         return _err("Boshlanish sanasi noto'g'ri")
@@ -274,6 +298,7 @@ def create_student():
         student = {
             "id": new_id, "firstName": first, "lastName": last, "name": f"{first} {last}",
             "phone": phone, "parentPhone": parent_phone, "password": password, "group": group,
+            "birthDate": birth, "address": address,
             "status": "active", "totalCoins": 0, "level": 1, "streak": 0, "refCode": f"REF{new_id}",
         }
         if p["center"] != "main":
@@ -375,8 +400,9 @@ def change_status(student_id: int):
 # --------------------------------------------------------------------------
 # Qabul: yangi kelganlar, fan bo'yicha yig'iladi va guruh ochilganda o'quvchiga aylantiriladi
 # --------------------------------------------------------------------------
-LEAD_STATUSES = {"new": "Yangi", "contacted": "Bog'lanildi", "waiting": "Guruh kutmoqda", "enrolled": "Qabul qilindi", "rejected": "Rad etdi"}
-OPEN_LEADS = ("new", "contacted", "waiting")
+LEAD_STATUSES = {"new": "Yangi", "contacted": "Bog'lanildi", "trial": "Sinov darsi", "waiting": "Guruh kutmoqda",
+                 "enrolled": "Qabul qilindi", "rejected": "Rad etdi"}
+OPEN_LEADS = ("new", "contacted", "trial", "waiting")
 
 
 @bp.get("/leads")
@@ -386,7 +412,7 @@ def list_leads():
     where, params = ["center_id = ?"], [p["center"]]
     status = request.args.get("status", "open")
     if status == "open":
-        where.append("status IN ('new', 'contacted', 'waiting')")
+        where.append("status IN ('new', 'contacted', 'trial', 'waiting')")
     elif status in LEAD_STATUSES:
         where.append("status = ?")
         params.append(status)
@@ -401,7 +427,7 @@ def list_leads():
     with _db() as conn:
         items = _all(conn, f"SELECT * FROM crm_leads WHERE {' AND '.join(where)} ORDER BY created_at DESC LIMIT 500", params)
         subjects = _all(conn, """SELECT subject, COUNT(*) AS n FROM crm_leads WHERE center_id = ?
-            AND status IN ('new', 'contacted', 'waiting') GROUP BY subject ORDER BY n DESC""", (p["center"],))
+            AND status IN ('new', 'contacted', 'trial', 'waiting') GROUP BY subject ORDER BY n DESC""", (p["center"],))
     return jsonify({"ok": True, "items": items, "subjects": [{"subject": r["subject"], "waiting": int(r["n"])} for r in subjects]})
 
 
@@ -450,11 +476,101 @@ def lead_status(lead_id: str):
             return _err("O'quvchi topilmadi", 404)
     else:
         student_id = None
+    trial_at, trial_group = _text(body.get("trial_at"), 16), _text(body.get("trial_group"), 60)
+    if status == "trial" and not re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$", trial_at):
+        return _err("Sinov darsi sanasi va vaqtini tanlang")
     with _db() as conn:
         lead = _one(conn, "SELECT * FROM crm_leads WHERE id = ? AND center_id = ?", (lead_id, p["center"]))
         if not lead:
             return _err("Yozuv topilmadi", 404)
-        _x(conn, "UPDATE crm_leads SET status = ?, student_id = COALESCE(?, student_id), note = ?, updated_at = ? WHERE id = ?",
-           (status, student_id, _text(body.get("note"), 300) or lead["note"], _now_ms(), lead_id))
+        _x(conn, """UPDATE crm_leads SET status = ?, student_id = COALESCE(?, student_id), note = ?, updated_at = ?,
+            trial_at = COALESCE(?, trial_at), trial_group = COALESCE(?, trial_group) WHERE id = ?""",
+           (status, student_id, _text(body.get("note"), 300) or lead["note"], _now_ms(),
+            trial_at if status == "trial" else None, (trial_group or None) if status == "trial" else None, lead_id))
         _audit(conn, p, "lead.status", "lead", lead_id, {"from": lead["status"], "to": status, "student_id": student_id})
     return jsonify({"ok": True})
+
+
+
+def _birth_date(value: Any) -> Optional[str]:
+    """'' (kiritilmagan) yoki YYYY-MM-DD; noto'g'ri bo'lsa None."""
+    raw = _text(value, 10)
+    if not raw:
+        return ""
+    try:
+        day = date.fromisoformat(raw)
+    except ValueError:
+        return None
+    return raw if date(1930, 1, 1) <= day <= _today() else None
+
+
+@bp.post("/students/<int:student_id>/profile")
+@require_auth("admin", "manager")
+def edit_profile(student_id: int):
+    """Telefon, ota-ona telefoni, tug'ilgan sana va manzilni tahrirlash."""
+    p = g.principal
+    body = _body()
+    phone = re.sub(r"[\s\-()]", "", _text(body.get("phone"), 24))
+    parent_phone = re.sub(r"[\s\-()]", "", _text(body.get("parentPhone"), 24))
+    birth, address = _birth_date(body.get("birthDate")), _text(body.get("address"), 200)
+    if not re.match(r"^\+?\d{9,15}$", phone):
+        return _err("Telefon raqam noto'g'ri. Namuna: +998901234567")
+    if parent_phone and not re.match(r"^\+?\d{9,15}$", parent_phone):
+        return _err("Ota-ona telefoni noto'g'ri")
+    if birth is None:
+        return _err("Tug'ilgan sana noto'g'ri (YYYY-MM-DD)")
+    changed: dict[str, Any] = {}
+
+    def apply(student: dict[str, Any], data: dict[str, Any]):
+        if _norm_phone(phone) != _norm_phone(student.get("phone")):
+            for key in ("students", "teachers", "admins", "parents", "employers"):
+                for acc in data.get(key, []):
+                    if isinstance(acc, dict) and acc is not student and acc.get("phone") and _norm_phone(acc["phone"]) == _norm_phone(phone):
+                        return _err("Bu telefon raqam boshqa hisobda bor", 409)
+        for field, value in (("phone", phone), ("parentPhone", parent_phone), ("birthDate", birth), ("address", address)):
+            if (student.get(field) or "") != value:
+                changed[field] = value
+                student[field] = value
+
+    student, error = _mutate_student(student_id, apply)
+    if student is None:
+        return error
+    if changed:
+        with _db() as conn:
+            _audit(conn, p, "student.profile", "student", student_id, {"fields": sorted(changed)})
+    return jsonify({"ok": True, "student": _public(student)})
+
+
+@bp.post("/students/<int:student_id>/courses")
+@require_auth("admin", "manager")
+def edit_courses(student_id: int):
+    """Qo'shimcha kurs (guruh) qo'shish yoki olib tashlash — asosiy guruh o'zgarmaydi."""
+    p = g.principal
+    body = _body()
+    group = _text(body.get("group"), 60)
+    action = str(body.get("action") or "add")
+    if not group or action not in ("add", "remove"):
+        return _err("Guruhni tanlang")
+    when = _effective_date(body.get("date"))
+    if not when:
+        return _err("Sana noto'g'ri")
+
+    def apply(student: dict[str, Any], data: dict[str, Any]):
+        extra = [str(x) for x in student.get("extraGroups") or []] if isinstance(student.get("extraGroups"), list) else []
+        if action == "add":
+            if group == str(student.get("group") or "") or group in extra:
+                return _err("O'quvchi bu guruhda allaqachon bor")
+            extra.append(group)
+        else:
+            if group not in extra:
+                return _err("Bu qo'shimcha kurs emas")
+            extra.remove(group)
+        student["extraGroups"] = extra
+
+    student, error = _mutate_student(student_id, apply)
+    if student is None:
+        return error
+    with _db() as conn:
+        _insert_event(conn, p, {"student_id": student_id, "type": "course_added" if action == "add" else "course_removed",
+                                "to_group": group, "effective_date": when, "reason": _text(body.get("reason"), 300)}, p["center"])
+    return jsonify({"ok": True, "student": _public(student)})

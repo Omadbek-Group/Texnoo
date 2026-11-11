@@ -181,6 +181,21 @@ _SCHEMA = [
         created_at BIGINT NOT NULL,
         updated_at BIGINT NOT NULL
     )""",
+    # O'qituvchiga berilgan avans/oylik (har biri kassada xarajat sifatida ham yoziladi).
+    """CREATE TABLE IF NOT EXISTS sal_payouts (
+        id TEXT PRIMARY KEY,
+        center_id TEXT NOT NULL,
+        teacher_id BIGINT NOT NULL,
+        month TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        amount BIGINT NOT NULL CHECK (amount > 0),
+        note TEXT,
+        expense_id TEXT,
+        created_by_name TEXT,
+        created_at BIGINT NOT NULL
+    )""",
+    # Bir marta yuboriladigan xabarlar (tug'ilgan kun tabrigi) jurnali.
+    "CREATE TABLE IF NOT EXISTS notif_log (key TEXT PRIMARY KEY, created_at BIGINT NOT NULL)",
     # O'qituvchi oylik sharti: qat'iy (so'm) yoki foiz (value = foiz * 100). Tarix saqlanadi.
     """CREATE TABLE IF NOT EXISTS sal_rules (
         id TEXT PRIMARY KEY,
@@ -249,7 +264,9 @@ def init_finance_db() -> None:
         # Mavjud bazalar uchun migratsiya (yangi ustunlar).
         for table, column, ddl in (("fin_payments", "teacher_id", "BIGINT"),
                                    ("fin_fees", "discount_pct", "INTEGER NOT NULL DEFAULT 0"),
-                                   ("fin_fees", "discount_reason", "TEXT")):
+                                   ("fin_fees", "discount_reason", "TEXT"),
+                                   ("crm_leads", "trial_at", "TEXT"),
+                                   ("crm_leads", "trial_group", "TEXT")):
             if _pg():
                 _x(conn, f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {ddl}")
             elif column not in {r["name"] for r in _all(conn, f"PRAGMA table_info({table})")}:

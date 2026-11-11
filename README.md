@@ -31,6 +31,12 @@ INITIAL_ADMIN_PASSWORD=kamida8belgi     # kirgandan keyin ikkala o'zgaruvchini o
 - Chegirma oylik tarifga sababi bilan qo'yiladi. Bir oy (davr) uchun ortiqcha yoki qayta to'lov qabul qilinmaydi.
 - Qabul: yangi kelganlar fan bo'yicha yoziladi, guruh ochilganda bir bosishda o'quvchiga aylantiriladi. O'quvchi profilida to'lov va sertifikat.
 - AI yordamchi (admin/menejer): `OPENAI_API_KEY` kerak; AI'ga faqat umumiy raqamlar yuboriladi (ism/telefon yo'q).
+- O'quvchi profili: tug'ilgan sana va manzil (ixtiyoriy), qo'shimcha kurslar, davomat, test va vazifa natijalari.
+- Yangi guruh: nom, fan, o'qituvchi va haftalik vaqt bir yo'la ("Dars jadvali"). Qabulda sinov darsi.
+- Uy vazifasi: guruhga, barcha o'quvchilarga yoki bitta o'quvchiga, soat bilan muddat; ustoz baho qo'yadi.
+- Tug'ilgan kun: o'quvchi tizimda tabrik ko'radi; Telegram ulangan bo'lsa o'quvchiga tabrik, ustozga eslatma yuboriladi (`BOT_TOKEN` kerak).
+- O'qituvchiga avans/oylik berish: oylikdan ayiriladi va kassada "Ish haqi" xarajati bo'ladi.
+- Ta'lim yangiliklari: `NEWS_RSS_URLS` (standart: kun.uz, gazeta.uz, daryo.uz, uza.uz), har 5 daqiqada yangilanadi.
 - Moliya (`/api/finance/*`): to'lov, xarajat, oylik tarif, qarzdorlik, kassa, CSV eksport, audit log.
   Yozuvlar o'chirilmaydi — faqat sabab bilan bekor qilinadi. `DATABASE_URL` bo'lsa PostgreSQL'da, aks holda SQLite'da.
 - CRM (`/api/crm/*`, admin menyusida "O'quvchilar (CRM)"): qabul, guruhga ko'chirish, muzlatish,

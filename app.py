@@ -620,7 +620,7 @@ _ACCOUNT_COLLECTIONS = {"students": "student", "teachers": "teacher", "admins": 
                         "parents": "parent", "employers": "employer"}
 # Boshqa hisoblarning shaxsiy/huquq maydonlari: oddiy foydalanuvchi ularni o'zgartira olmaydi.
 _PROTECTED_FIELDS = ("name", "firstName", "lastName", "phone", "email", "code", "status", "level",
-                     "childPhone", "childPhones", "centerId")
+                     "childPhone", "childPhones", "centerId", "parentPhone", "birthDate", "address", "extraGroups")
 
 
 def _is_self(principal: dict, role: str, item: dict) -> bool:
@@ -640,6 +640,9 @@ def get_data():
             for item in data.get(key, []):
                 if isinstance(item, dict) and not _is_self(p, role, item):
                     item["email"] = ""
+                    item["address"] = ""
+                    item["parentPhone"] = ""
+                    item["birthDate"] = ""
                     if p["role"] != "parent":
                         item["phone"] = ""
     # Bitirgan/ketgan o'quvchilar arxivda: ular faqat CRM sahifasida (/api/crm) ko'rinadi.
@@ -710,6 +713,9 @@ def guard_dataset_write(current: dict, incoming: dict, principal: dict) -> tuple
         out["admins"] = current.get("admins", [])
     if not full_admin:
         out["settings"] = current.get("settings", {})
+    if not staff:
+        # Baholarni faqat o'qituvchi/admin qo'yadi.
+        out["homeworkGrades"] = current.get("homeworkGrades", [])
 
     events: list[dict] = []
     cur_students = {n_int(x.get("id")): x for x in current.get("students", []) if isinstance(x, dict)}
@@ -1349,6 +1355,8 @@ def static_files(path: str):
 
 init_data_file()
 start_telegram_bot()
+if Config.BOT_TOKEN and Config.RUN_TELEGRAM_BOT:
+    school.start_birthday_job(send_bot_message)
 
 if __name__ == "__main__":
     debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"

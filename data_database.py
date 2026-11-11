@@ -51,6 +51,7 @@ _META_KEYS = (
     "news",
     "homeworks",
     "homeworkSubmissions",
+    "homeworkGrades",
     "lessonPlans",
     "courses",
     "jobs",

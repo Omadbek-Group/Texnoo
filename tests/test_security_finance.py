@@ -367,7 +367,7 @@ def test_teacher_salary_percent_and_fixed(client):
     my = client.get("/api/school/salary/my", headers=teacher).get_json()["item"]
     assert my["amount"] == 300000 and len(my["payments"]) == 1
     assert client.get("/api/school/salary", headers=teacher).status_code == 403
-    assert client.get("/api/school/salary", headers=login(client, "+998900000005", "mgr")).status_code == 403
+    assert client.get("/api/school/salary", headers=login(client, "+998900000005", "mgr")).status_code == 200  # menejer ham boshqaradi
     assert client.get("/api/school/salary", headers=login(client, "+998900000006", "boss")).status_code == 200
 
 
@@ -464,3 +464,114 @@ def test_ai_assistant_uses_aggregates_only(client, monkeypatch):
     assert out.status_code == 200 and out.get_json()["answer"] == "2 ta qarzdor"
     assert "qarzdorlar_soni" in sent["body"] and "Ali Valiyev" not in sent["body"] and "+998901112233" not in sent["body"]
     assert client.post("/api/school/ai", headers=login(client, "+998900000001", "teach"), json={"question": "x"}).status_code == 403
+
+
+# ---------------------------------------------------------------- profil, kurslar, guruh, sinov, avans, tug'ilgan kun, vazifa bahosi, yangiliklar
+def test_student_profile_birth_address_and_courses(client):
+    admin = login(client, "+998900000002", "admin")
+    base = {"firstName": "Sevara", "lastName": "Qodirova", "phone": "+998907000001", "group": "D1"}
+    assert client.post("/api/crm/students", headers=admin, json={**base, "birthDate": "2099-01-01"}).status_code == 400
+    res = client.post("/api/crm/students", headers=admin, json={**base, "birthDate": "2010-05-17", "address": "Toshkent, Chilonzor"})
+    assert res.status_code == 201
+    sid = res.get_json()["student"]["id"]
+    assert client.post("/api/crm/students", headers=admin, json={**base, "phone": "+998907000002"}).status_code == 201  # sana/manzil ixtiyoriy
+    assert client.post(f"/api/crm/students/{sid}/profile", headers=admin, json={"phone": "+998907000001", "address": "Samarqand", "birthDate": ""}).status_code == 200
+    assert client.post(f"/api/crm/students/{sid}/profile", headers=admin, json={"phone": "+998901112233"}).status_code == 409
+    assert client.post(f"/api/crm/students/{sid}/courses", headers=admin, json={"group": "D2"}).status_code == 200
+    assert client.post(f"/api/crm/students/{sid}/courses", headers=admin, json={"group": "D2"}).status_code == 400
+    sheet = client.get("/api/school/attendance/sheet?group=D2", headers=admin).get_json()["items"]
+    assert sid in [x["student_id"] for x in sheet]   # qo'shimcha kurs guruhida ham ko'rinadi
+    prof = client.get(f"/api/crm/students/{sid}/history", headers=admin).get_json()
+    assert prof["student"]["address"] == "Samarqand" and prof["student"]["extraGroups"] == ["D2"] and "attendance" in prof
+    student = login(client, "+998901112233", "pass1")
+    other = next(x for x in client.get("/api/data", headers=student).get_json()["students"] if x["id"] == sid)
+    assert other["address"] == "" and other["birthDate"] == ""
+
+
+def test_create_group_with_schedule(client):
+    admin = login(client, "+998900000002", "admin")
+    body = {"name": "PY-1", "subject": "Python", "teacher_id": 2001, "room": "201", "weekdays": [1, 3, 5], "start": "16:00", "end": "17:30"}
+    assert client.post("/api/school/groups", headers=admin, json=body).status_code == 201
+    assert client.post("/api/school/groups", headers=admin, json=body).status_code == 409                       # nom band
+    assert client.post("/api/school/groups", headers=admin, json={**body, "name": "PY-2", "weekdays": [3], "room": "202"}).status_code == 409  # o'qituvchi band
+    lessons = [l for l in client.get("/api/school/lessons", headers=admin).get_json()["items"] if l["group_name"] == "PY-1"]
+    assert sorted(l["weekday"] for l in lessons) == [1, 3, 5]
+    assert "PY-1" in [g["name"] for g in client.get("/api/crm/groups", headers=admin).get_json()["items"]]
+    assert "PY-1" in client.get("/api/school/groups", headers=login(client, "+998900000001", "teach")).get_json()["items"]
+
+
+def test_lead_trial_lesson(client):
+    admin = login(client, "+998900000002", "admin")
+    lid = client.post("/api/crm/leads", headers=admin, json={"name": "Aziz", "phone": "+998909990000", "subject": "SAT"}).get_json()["lead"]["id"]
+    assert client.post(f"/api/crm/leads/{lid}/status", headers=admin, json={"status": "trial"}).status_code == 400
+    assert client.post(f"/api/crm/leads/{lid}/status", headers=admin, json={"status": "trial", "trial_at": "2026-12-01T15:00", "trial_group": "D1"}).status_code == 200
+    lead = client.get("/api/crm/leads", headers=admin).get_json()["items"][0]
+    assert lead["status"] == "trial" and lead["trial_at"] == "2026-12-01T15:00" and lead["trial_group"] == "D1"
+
+
+def test_salary_advance_and_expense(client):
+    manager = login(client, "+998900000005", "mgr")
+    admin = login(client, "+998900000002", "admin")
+    client.post("/api/school/salary/rules", headers=manager, json={"teacher_id": 2002, "type": "fixed", "value": 3000000})
+    assert client.post("/api/school/salary/payouts", headers=manager, json={"teacher_id": 2002, "amount": 1000000, "kind": "advance"}).status_code == 201
+    assert client.post("/api/school/salary/payouts", headers=manager, json={"teacher_id": 2002, "amount": 0}).status_code == 400
+    row = next(r for r in client.get("/api/school/salary", headers=admin).get_json()["items"] if r["teacher_id"] == 2002)
+    assert row["amount"] == 3000000 and row["advance"] == 1000000 and row["remaining"] == 2000000
+    s = client.get("/api/finance/summary", headers=admin).get_json()
+    assert s["expense_by_category"].get("salary") == 1000000
+
+
+def test_birthday_greetings_sent_once(client):
+    admin = login(client, "+998900000002", "admin")
+    school = sys.modules["school"]
+    today = __import__("finance")._today()
+    data = client.get("/api/data", headers=admin).get_json()
+    for st in data["students"]:
+        if st["id"] == 1001:
+            st["birthDate"] = f"2011-{today.isoformat()[5:]}"
+            st["telegramId"] = 555
+    for t in data["teachers"]:
+        if t["id"] == 2001:
+            t["telegramId"] = 777
+    client.post("/api/data", json=data, headers=admin)
+    sent = []
+    assert school.birthday_tick(lambda chat, text: sent.append((chat, text)) or (True, "")) == 2
+    assert school.birthday_tick(lambda chat, text: sent.append((chat, text)) or (True, "")) == 0   # qayta yuborilmaydi
+    assert {c for c, _ in sent} == {555, 777} and "tabriklaymiz" in sent[0][1]
+    teacher = login(client, "+998900000001", "teach")
+    assert client.get("/api/school/students", headers=teacher).get_json()["birthdays"] == ["Ali Valiyev"]
+
+
+def test_homework_grades_only_by_staff(client):
+    teacher = login(client, "+998900000001", "teach")
+    data = client.get("/api/data", headers=teacher).get_json()
+    data["homeworkGrades"] = [{"homeworkId": "hw1", "studentId": 1001, "grade": 5, "teacherId": 2001}]
+    client.post("/api/data", json=data, headers=teacher)
+    student = login(client, "+998901112233", "pass1")
+    sdata = client.get("/api/data", headers=student).get_json()
+    assert sdata["homeworkGrades"][0]["grade"] == 5
+    sdata["homeworkGrades"] = [{"homeworkId": "hw1", "studentId": 1001, "grade": 2}]
+    client.post("/api/data", json=sdata, headers=student)
+    assert client.get("/api/data", headers=teacher).get_json()["homeworkGrades"][0]["grade"] == 5
+
+
+def test_edu_news_filter(client, monkeypatch):
+    school = sys.modules["school"]
+    rss = ("<rss><channel>"
+           "<item><title>Maktab o'quvchilari uchun yangi imtihon tartibi</title><link>https://kun.uz/1</link></item>"
+           "<item><title>Futbol: terma jamoa g'alabasi</title><link>https://kun.uz/2</link></item>"
+           "<item><title>Bad link</title><link>javascript:alert(1)</link></item>"
+           "</channel></rss>").encode("utf-8")
+
+    class Fake:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self, n=None): return rss
+
+    monkeypatch.setattr(school, "NEWS_FEEDS", ["https://kun.uz/news/rss"])
+    monkeypatch.setattr(school.urllib.request, "urlopen", lambda req, timeout=0: Fake())
+    school._news_cache.update(at=0, items=[])
+    h = login(client, "+998901112233", "pass1")
+    out = client.get("/api/school/news", headers=h).get_json()
+    assert [i["link"] for i in out["items"]] == ["https://kun.uz/1"]
+    assert len(client.get("/api/school/news?all=1", headers=h).get_json()["items"]) == 2
