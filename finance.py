@@ -136,6 +136,48 @@ _SCHEMA = [
         created_at BIGINT NOT NULL
     )""",
     "CREATE INDEX IF NOT EXISTS ix_crm_events_student ON crm_events (center_id, student_id)",
+    # Dars jadvali: haftalik takrorlanuvchi darslar. O'chirilmaydi, status='removed' bo'ladi.
+    """CREATE TABLE IF NOT EXISTS sched_lessons (
+        id TEXT PRIMARY KEY,
+        center_id TEXT NOT NULL,
+        group_name TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        teacher_id BIGINT NOT NULL,
+        room TEXT,
+        weekday INTEGER NOT NULL,
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_by_name TEXT,
+        created_at BIGINT NOT NULL
+    )""",
+    "CREATE INDEX IF NOT EXISTS ix_sched_lessons_day ON sched_lessons (center_id, weekday)",
+    # Davomat: guruh + sana + o'quvchi bo'yicha bitta yozuv (qayta belgilansa yangilanadi).
+    """CREATE TABLE IF NOT EXISTS att_records (
+        id TEXT PRIMARY KEY,
+        center_id TEXT NOT NULL,
+        lesson_date TEXT NOT NULL,
+        group_name TEXT NOT NULL,
+        student_id BIGINT NOT NULL,
+        status TEXT NOT NULL,
+        note TEXT,
+        marked_by_id BIGINT,
+        marked_by_name TEXT,
+        updated_at BIGINT NOT NULL,
+        UNIQUE (center_id, lesson_date, group_name, student_id)
+    )""",
+    "CREATE INDEX IF NOT EXISTS ix_att_records_student ON att_records (center_id, student_id, lesson_date)",
+    # O'qituvchi oylik sharti: qat'iy (so'm) yoki foiz (value = foiz * 100). Tarix saqlanadi.
+    """CREATE TABLE IF NOT EXISTS sal_rules (
+        id TEXT PRIMARY KEY,
+        center_id TEXT NOT NULL,
+        teacher_id BIGINT NOT NULL,
+        type TEXT NOT NULL,
+        value BIGINT NOT NULL CHECK (value >= 0),
+        effective_from TEXT NOT NULL,
+        created_by_name TEXT,
+        created_at BIGINT NOT NULL
+    )""",
 ]
 
 _initialized = False
@@ -190,6 +232,11 @@ def init_finance_db() -> None:
     with _db() as conn:
         for stmt in _SCHEMA:
             _x(conn, stmt)
+        # Mavjud bazalar uchun migratsiya: foizli oylik to'lovni qabul paytidagi o'qituvchiga bog'laydi.
+        if _pg():
+            _x(conn, "ALTER TABLE fin_payments ADD COLUMN IF NOT EXISTS teacher_id BIGINT")
+        elif "teacher_id" not in {r["name"] for r in _all(conn, "PRAGMA table_info(fin_payments)")}:
+            _x(conn, "ALTER TABLE fin_payments ADD COLUMN teacher_id BIGINT")
     _initialized = True
 
 
@@ -489,6 +536,7 @@ def create_payment():
             "student_id": student_id,
             "student_name": _student_name(student),
             "group_name": str(student.get("group") or ""),
+            "teacher_id": int(student.get("teacherId") or 0) or None,
             "amount": amount,
             "method": method,
             "period": period,

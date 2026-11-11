@@ -22,9 +22,11 @@ from data_database import DATA_DIR, get_auth_record
 
 TOKEN_MAX_AGE_SEC = int(os.environ.get("AUTH_TOKEN_MAX_AGE_SEC", 7 * 24 * 3600))
 
-# Admin "level" values. A cashier is an admin account restricted to the cash desk.
-FULL_ADMIN_LEVELS = {"platform_admin", "school_admin"}
+# Admin "level" values. Boshliq (director) has full rights; cashier = cash desk only;
+# manager = students (CRM), schedule and attendance only.
+FULL_ADMIN_LEVELS = {"platform_admin", "school_admin", "director"}
 CASHIER_LEVEL = "cashier"
+MANAGER_LEVEL = "manager"
 
 
 def _load_secret() -> str:
@@ -72,7 +74,7 @@ def issue_token(role: str, account_id: int) -> Optional[str]:
 def principal_from_record(role: str, account_id: int, record: dict[str, Any]) -> dict[str, Any]:
     meta = record.get("meta") or {}
     level = str(meta.get("level") or meta.get("role") or "") if role == "admin" else ""
-    if role == "admin" and level not in FULL_ADMIN_LEVELS | {CASHIER_LEVEL}:
+    if role == "admin" and level not in FULL_ADMIN_LEVELS | {CASHIER_LEVEL, MANAGER_LEVEL}:
         level = "school_admin"
     return {
         "role": role,
@@ -120,7 +122,7 @@ def is_cashier(principal: Optional[dict[str, Any]]) -> bool:
 
 
 def require_auth(*allowed: str) -> Callable:
-    """Decorator. `allowed` items: a role ("student"), "admin" (full admins only) or "cashier".
+    """Decorator. `allowed` items: a role ("student"), "admin" (full admins only), "cashier" or "manager".
 
     With no arguments any authenticated user passes. The caller is put on `g.principal`.
     """
@@ -145,8 +147,8 @@ def _matches(principal: dict[str, Any], allowed: tuple[str, ...]) -> bool:
     for item in allowed:
         if item == "admin" and is_full_admin(principal):
             return True
-        if item == "cashier" and is_cashier(principal):
+        if item in {CASHIER_LEVEL, MANAGER_LEVEL} and principal["role"] == "admin" and principal["level"] == item:
             return True
-        if item not in {"admin", "cashier"} and principal["role"] == item:
+        if item not in {"admin", CASHIER_LEVEL, MANAGER_LEVEL} and principal["role"] == item:
             return True
     return False

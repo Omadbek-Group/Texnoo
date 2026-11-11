@@ -122,7 +122,7 @@ def _public(s: dict[str, Any], balance: Optional[dict[str, int]] = None) -> dict
 # O'qish
 # --------------------------------------------------------------------------
 @bp.get("/summary")
-@require_auth("admin", "cashier")
+@require_auth("admin", "cashier", "manager")
 def summary():
     p = g.principal
     students = _students(p["center"])
@@ -141,7 +141,7 @@ def summary():
 
 
 @bp.get("/groups")
-@require_auth("admin", "cashier")
+@require_auth("admin", "cashier", "manager")
 def groups():
     p = g.principal
     data = _dataset["read"]()
@@ -157,7 +157,7 @@ def groups():
 
 
 @bp.get("/students")
-@require_auth("admin", "cashier")
+@require_auth("admin", "cashier", "manager")
 def list_students():
     p = g.principal
     status = request.args.get("status", "active")
@@ -185,7 +185,7 @@ def list_students():
 
 
 @bp.get("/students/<int:student_id>/history")
-@require_auth("admin", "cashier")
+@require_auth("admin", "cashier", "manager")
 def history(student_id: int):
     p = g.principal
     student = next((s for s in _students(p["center"]) if int(s.get("id") or 0) == student_id), None)
@@ -223,7 +223,7 @@ def _mutate_student(student_id: int, fn: Callable[[dict[str, Any], dict[str, Any
 
 
 @bp.post("/students")
-@require_auth("admin")
+@require_auth("admin", "manager")
 def create_student():
     p = g.principal
     body = _body()
@@ -294,7 +294,7 @@ def create_student():
 
 
 @bp.post("/students/<int:student_id>/move")
-@require_auth("admin")
+@require_auth("admin", "manager")
 def move_student(student_id: int):
     p = g.principal
     body = _body()
@@ -331,7 +331,7 @@ def move_student(student_id: int):
 
 
 @bp.post("/students/<int:student_id>/status")
-@require_auth("admin")
+@require_auth("admin", "manager")
 def change_status(student_id: int):
     p = g.principal
     body = _body()

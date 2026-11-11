@@ -4413,6 +4413,7 @@
             class="badge-notif" id="sChatBadge" style="display:none;">0</span></div>
         <div class="nav-item" onclick="showPage('matpg',this,'DARSLIK VA KITOBLAR')"><i class="fas fa-book"></i> Darsliklar</div>
         <div class="nav-item" onclick="showPage('myfinpg',this,'TO\'LOVLARIM')"><i class="fas fa-receipt"></i> To'lovlarim</div>
+        <div class="nav-item" onclick="showPage('myattpg',this,'DAVOMAT VA JADVAL')"><i class="fas fa-calendar-check"></i> Davomat va jadval</div>
         <div class="nav-item" onclick="showPage('settpg',this,'SOZLAMALAR')"><i class="fas fa-gear"></i> Sozlamalar</div>
         <div class="nav-sec">Karyera</div>
         <div class="nav-item" onclick="showPage('certspg',this,'SERTIFIKATLARIM')"><i class="fas fa-certificate" style="color:var(--gold);"></i> Sertifikatlarim</div>
@@ -4445,6 +4446,9 @@
         <div class="nav-item" onclick="showPage('grppg',this,'GURUHLAR')"><i class="fas fa-layer-group"></i> Guruhlar
         </div>
         <div class="nav-item" onclick="showPage('coursespg',this,'KURSLAR')"><i class="fas fa-graduation-cap"></i> Kurslar</div>
+        <div class="nav-item" onclick="showPage('attpg',this,'DAVOMAT')"><i class="fas fa-user-check" style="color:var(--green);"></i> Davomat</div>
+        <div class="nav-item" onclick="showPage('schedpg',this,'DARS JADVALIM')"><i class="fas fa-calendar-week"></i> Dars jadvalim</div>
+        <div class="nav-item" onclick="showPage('mysalpg',this,'OYLIGIM')"><i class="fas fa-sack-dollar" style="color:var(--gold);"></i> Oyligim</div>
         <div class="nav-item" onclick="showPage('lpg',this,'ISH REJA')"><i class="fas fa-book-open"></i> Ish reja (mavzu)</div>
         <div class="nav-item" onclick="showPage('hwmgrpg',this,'VAZIFA BERISH')"><i class="fas fa-tasks"></i> Vazifa berish</div>
         <div class="nav-item" onclick="showPage('matmgrpg',this,'DARSLIK/KITOB')"><i class="fas fa-book"></i> Darslik/Kitob</div>
@@ -4467,7 +4471,10 @@
             class="fas fa-tachometer-alt"></i> Dashboard</div>
         <div class="nav-item" onclick="showPage('stpg',this,'TALABALAR')"><i class="fas fa-users"></i> Barcha talabalar
         </div>
-        <div class="nav-item" onclick="showPage('crmpg',this,'O'QUVCHILAR (CRM)')"><i class="fas fa-address-book" style="color:var(--cyan);"></i> O'quvchilar (CRM)</div>
+        <div class="nav-item" onclick="showPage('crmpg',this,'O\'QUVCHILAR (CRM)')"><i class="fas fa-address-book" style="color:var(--cyan);"></i> O'quvchilar (CRM)</div>
+        <div class="nav-item" onclick="showPage('schedpg',this,'DARS JADVALI')"><i class="fas fa-calendar-week" style="color:var(--cyan);"></i> Dars jadvali</div>
+        <div class="nav-item" onclick="showPage('attpg',this,'DAVOMAT')"><i class="fas fa-user-check" style="color:var(--green);"></i> Davomat</div>
+        <div class="nav-item" onclick="showPage('salpg',this,'O\'QITUVCHILAR OYLIGI')"><i class="fas fa-sack-dollar" style="color:var(--gold);"></i> O'qituvchilar oyligi</div>
         <div class="nav-item" onclick="showPage('newsmgrpg',this,'YANGILIKLAR')"><i class="fas fa-newspaper"></i> Yangiliklar</div>
         <div class="nav-item" onclick="showPage('chatpg',this,'CHAT')"><i class="fas fa-comments"></i> Chat</div>
         <div class="nav-item" onclick="showPage('tpg',this,'O\'QITUVCHILAR')"><i class="fas fa-chalkboard-teacher"></i>
@@ -4490,6 +4497,7 @@
         <div class="nav-sec">Ota-ona kabineti</div>
         <div class="nav-item active" onclick="showPage('parentChildPg',this,'FARZANDIM')"><i class="fas fa-child"></i> Farzandim</div>
         <div class="nav-item" onclick="showPage('myfinpg',this,'TO\'LOVLAR')"><i class="fas fa-receipt"></i> To'lovlar</div>
+        <div class="nav-item" onclick="showPage('myattpg',this,'DAVOMAT VA JADVAL')"><i class="fas fa-calendar-check"></i> Davomat va jadval</div>
         <div class="nav-item" onclick="showPage('tapg',this,'PROFIL')"><i class="fas fa-id-card"></i> Profil</div>
         <div class="nav-item" onclick="showPage('settpg',this,'SOZLAMALAR')"><i class="fas fa-gear"></i> Sozlamalar</div>
         <div class="nav-sec">Hisob</div>
@@ -4695,6 +4703,11 @@
         <div class="page" id="finpg"></div>
         <div class="page" id="myfinpg"></div>
         <div class="page" id="crmpg"></div>
+        <div class="page" id="schedpg"></div>
+        <div class="page" id="attpg"></div>
+        <div class="page" id="salpg"></div>
+        <div class="page" id="mysalpg"></div>
+        <div class="page" id="myattpg"></div>
 
         <!-- TALABA BOSH SAHIFA -->
         <div class="page active" id="dpg">
@@ -6012,6 +6025,8 @@
                   <select id="naLevel" class="form-control" style="width:150px;">
                     <option value="school_admin">School Admin</option>
                     <option value="platform_admin">Platform Admin</option>
+                    <option value="director">Boshliq</option>
+                    <option value="manager">Menejer</option>
                     <option value="cashier">Kassir</option>
                   </select>
                 </div>
@@ -6241,6 +6256,7 @@
     // ══════════════════════════════════════════════════
     // DATA
     // ══════════════════════════════════════════════════
+    const ADMIN_LEVEL_LABEL = { platform_admin: 'Platform Admin', school_admin: 'School Admin', director: 'Boshliq', manager: 'Menejer', cashier: 'Kassir' };
     const DB = {
       students: [],
       teachers: [],
@@ -7190,7 +7206,7 @@
       const avHtml = curUser.avatar ? `<img src="${curUser.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">` : ini;
       document.getElementById('sbAv').innerHTML = avHtml;
       document.getElementById('sbNm').textContent = curUser.name;
-      const roleLabel = r === 'student' ? "// Talaba" : r === 'teacher' ? "// O'qituvchi" : r === 'parent' ? "// Ota-ona" : r === 'employer' ? "// Ish beruvchi" : ("// Admin — " + (curUser.level === 'platform_admin' ? 'Platform' : curUser.level === 'cashier' ? 'Kassir' : 'Maktab'));
+      const roleLabel = r === 'student' ? "// Talaba" : r === 'teacher' ? "// O'qituvchi" : r === 'parent' ? "// Ota-ona" : r === 'employer' ? "// Ish beruvchi" : ("// " + (ADMIN_LEVEL_LABEL[curUser.level] || 'School Admin'));
       document.getElementById('sbRl').textContent = roleLabel;
       document.getElementById('tbCoins').textContent = '🪙 ' + (curUser.coins || 0);
       document.getElementById('tbDiamonds').textContent = '💎 ' + diamonds;
@@ -7205,8 +7221,9 @@
       else if (r === 'teacher') { initT(); showPage('adpg', null, 'STATISTIKA'); }
       else if (r === 'parent') { initP(); showPage('parentChildPg', null, 'FARZANDIM'); }
       else if (r === 'employer') { initE(); showPage('ejobspg', null, "ISH E'LONLARIM"); }
-      else if (curUser.level === 'cashier') { finApplyCashierNav(); showPage('finpg', null, 'MOLIYA VA KASSA'); }
-      else { finApplyCashierNav(false); initA(); showPage('admpg', null, 'ADMIN DASHBOARD'); }
+      else if (curUser.level === 'cashier') { finApplyRoleNav('cashier'); showPage('finpg', null, 'MOLIYA VA KASSA'); }
+      else if (curUser.level === 'manager') { finApplyRoleNav('manager'); showPage('crmpg', null, "O'QUVCHILAR (CRM)"); }
+      else { finApplyRoleNav(''); initA(); showPage('admpg', null, 'ADMIN DASHBOARD'); }
       renderCChats(); renderCFriends(); renderCReqs(); renderCMarket();
       initEP(); initSP(); initReactPick(); renderMktPage(); fillCoinSelects();
       // Talaba bo'lsa — coin/olmos/inventar/equip holatini serverdan tortib,
@@ -7868,7 +7885,7 @@
       saveData();
       document.getElementById('naName').value = ''; document.getElementById('naIdentifier').value = ''; document.getElementById('naPass').value = '';
       renderAdminAccountsTable();
-      showToast('✅ ' + name + " qo'shildi (" + (level === 'platform_admin' ? 'Platform Admin' : level === 'cashier' ? 'Kassir' : 'School Admin') + ')');
+      showToast('✅ ' + name + " qo'shildi (" + (ADMIN_LEVEL_LABEL[level] || 'School Admin') + ')');
     }
     window.addAdminAccount = addAdminAccount;
     function renderAdminAccountsTable() {
@@ -7876,7 +7893,7 @@
       body.innerHTML = DB.admins.map((a, i) => `<tr>
         <td style="font-family:'JetBrains Mono',monospace;color:var(--text3);">${i + 1}</td>
         <td><strong>${a.name}</strong></td>
-        <td><span class="badge ${a.level === 'platform_admin' ? 'gr' : 'bb'}">${a.level === 'platform_admin' ? 'Platform Admin' : a.level === 'cashier' ? 'Kassir' : 'School Admin'}</span></td>
+        <td><span class="badge ${a.level === 'platform_admin' ? 'gr' : 'bb'}">${ADMIN_LEVEL_LABEL[a.level] || 'School Admin'}</span></td>
         <td style="font-size:11px;color:var(--text2);">${a.email || a.phone || '—'}</td>
         <td><code style="background:var(--card2);padding:2px 6px;border-radius:4px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--cyan);">${a.pass}</code></td>
         <td>${DB.admins.length > 1 ? `<button class="btn btn-xs btn-danger" onclick="deleteAdminAccount(${a.id})"><i class="fas fa-trash"></i></button>` : '—'}</td>
@@ -9809,6 +9826,11 @@
       if (id === 'finpg') { try { finRender(); } catch (e) { console.warn('FIN render:', e); } }
       if (id === 'myfinpg') { try { finRenderMy(); } catch (e) { console.warn('MYFIN render:', e); } }
       if (id === 'crmpg') { try { crmRender(); } catch (e) { console.warn('CRM render:', e); } }
+      if (id === 'schedpg') { try { schRender(); } catch (e) { console.warn('SCHED render:', e); } }
+      if (id === 'attpg') { try { attRender(); } catch (e) { console.warn('ATT render:', e); } }
+      if (id === 'salpg') { try { salRender(); } catch (e) { console.warn('SAL render:', e); } }
+      if (id === 'mysalpg') { try { salRenderMy(); } catch (e) { console.warn('MYSAL render:', e); } }
+      if (id === 'myattpg') { try { attRenderMy(); } catch (e) { console.warn('MYATT render:', e); } }
       if (id === 'certspg') { try { renderCertificatesList(); } catch (e) { console.warn('CERTSPG render:', e); } }
       if (id === 'certsadminpg') { try { renderCertsAdmin(); } catch (e) { console.warn('CERTSADMIN render:', e); } }
       if (id === 'jobspg') { try { renderStudentJobsPage(); } catch (e) { console.warn('JOBSPG render:', e); } }

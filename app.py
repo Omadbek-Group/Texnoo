@@ -41,6 +41,7 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
 import crm
+import school
 from crm import ARCHIVED, record_events, student_status
 from finance import audit, bp as finance_bp, init_finance_db
 from security import is_full_admin, issue_token, require_auth
@@ -153,6 +154,7 @@ STUDENT_DEFAULTS = {
 app = Flask(__name__, static_folder=None)
 app.register_blueprint(finance_bp)
 app.register_blueprint(crm.bp)
+app.register_blueprint(school.bp)
 app.config["MAX_CONTENT_LENGTH"] = Config.MAX_UPLOAD_SIZE
 if Config.CORS_ALLOW_ALL:
     CORS(app, resources={r"/*": {"origins": "*"}})

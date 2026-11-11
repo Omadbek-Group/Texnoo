@@ -21,7 +21,12 @@ INITIAL_ADMIN_PASSWORD=kamida8belgi     # kirgandan keyin ikkala o'zgaruvchini o
 ```
 
 - Login token beradi; `/api/data` va boshqa API'lar tokensiz ishlamaydi. Rollar serverda tekshiriladi.
-- Admin hisoblari darajasi: `platform_admin`, `school_admin`, `cashier` (kassir faqat moliya bo'limini ko'radi).
+- Admin hisoblari darajasi: `platform_admin`, `school_admin`, `director` (boshliq, to'liq huquq),
+  `manager` (menejer: CRM, jadval, davomat), `cashier` (kassir: faqat moliya).
+- Jadval va davomat (`/api/school/*`): haftalik darslar (o'qituvchi/xona/guruh to'qnashuvi tekshiriladi),
+  davomat (keldi/kechikdi/sababli/kelmadi), kunlik va oylik statistika. O'quvchi va ota-ona o'zinikini,
+  o'qituvchi o'z guruhlarini ko'radi.
+- O'qituvchi oyligi: qat'iy maosh yoki shu oyda qabul qilingan to'lovlardan foiz; o'qituvchi "Oyligim"da o'zinikini ko'radi.
 - Moliya (`/api/finance/*`): to'lov, xarajat, oylik tarif, qarzdorlik, kassa, CSV eksport, audit log.
   Yozuvlar o'chirilmaydi — faqat sabab bilan bekor qilinadi. `DATABASE_URL` bo'lsa PostgreSQL'da, aks holda SQLite'da.
 - CRM (`/api/crm/*`, admin menyusida "O'quvchilar (CRM)"): qabul, guruhga ko'chirish, muzlatish,

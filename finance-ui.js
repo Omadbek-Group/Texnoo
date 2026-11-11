@@ -18,7 +18,8 @@
   const dt = (ms) => { const d = new Date(Number(ms)); return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
   const newKey = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
   const digits = (v) => String(v || '').replace(/\D/g, '');
-  const isFullAdmin = () => curUser && curUser.role === 'admin' && curUser.level !== 'cashier';
+  const isFullAdmin = () => curUser && curUser.role === 'admin' && ['platform_admin', 'school_admin', 'director'].includes(curUser.level || 'school_admin');
+  const canManage = () => isFullAdmin() || (curUser && curUser.role === 'admin' && curUser.level === 'manager');
 
   const st = { tab: 'dash', from: monthStart(), to: today(), page: 1, q: '', method: '', status: '', category: '', feeQ: '', auditPage: 1 };
 
@@ -439,12 +440,12 @@
     } catch (e) { body.innerHTML = errorBox(e.message, 'finRenderMy()'); }
   }
 
-  // Kassir faqat moliya, profil va sozlamalarni ko'radi (server ham shunday cheklaydi).
-  function finApplyCashierNav(isCashier = true) {
+  // Kassir/menejer faqat o'z bo'limlarini ko'radi (server ham shunday cheklaydi). '' = hammasi ko'rinadi.
+  const ROLE_PAGES = { cashier: /finpg|tapg|settpg|doLogout/, manager: /crmpg|schedpg|attpg|tapg|settpg|doLogout/ };
+  function finApplyRoleNav(level) {
+    const keep = ROLE_PAGES[level];
     document.querySelectorAll('#aNav .nav-item').forEach(el => {
-      const click = el.getAttribute('onclick') || '';
-      const keep = /finpg|tapg|settpg|doLogout/.test(click);
-      el.style.display = isCashier && !keep ? 'none' : '';
+      el.style.display = keep && !keep.test(el.getAttribute('onclick') || '') ? 'none' : '';
     });
   }
 
@@ -467,7 +468,7 @@
         <input class="form-control" style="width:200px;" placeholder="Ism, telefon yoki guruh" value="${esc(crm.q)}" onkeydown="if(event.key==='Enter'){crmSet('q',this.value)}">
         <select class="form-control" style="width:140px;" id="crmGroupSel" onchange="crmSet('group',this.value)"><option value="">Barcha guruhlar</option></select>
         <span style="flex:1"></span>
-        ${isFullAdmin() ? `<button class="btn btn-success btn-sm" onclick="crmOpenCreate()"><i class="fas fa-user-plus"></i> Yangi o'quvchi</button>` : ''}
+        ${canManage() ? `<button class="btn btn-success btn-sm" onclick="crmOpenCreate()"><i class="fas fa-user-plus"></i> Yangi o'quvchi</button>` : ''}
       </div></div>
       <div class="tab-row" style="flex-wrap:wrap;">${tabs.map(([k, t]) => `<button class="tab-btn ${crm.status === k ? 'active' : ''}" onclick="crmSet('status','${k}')">${t}</button>`).join('')}</div>
       <div id="crmBody">${loading()}</div>`;
@@ -492,7 +493,7 @@
     body.innerHTML = loading();
     try {
       const out = await crmApi('/students?' + qs({ status: crm.status, group: crm.group, q: crm.q, page: crm.page, page_size: 25 }));
-      const admin = isFullAdmin();
+      const admin = canManage();
       body.innerHTML = `<div class="card"><div class="cb" style="padding:0;"><div class="tw"><table>
         <thead><tr><th>O'quvchi</th><th>Telefon</th><th>Guruh</th><th>Holat</th><th>Oylik</th><th>Qarz</th><th></th></tr></thead>
         <tbody>${out.items.map(s => `<tr>
@@ -608,18 +609,233 @@
     } catch (e) { showToast('❌ ' + e.message); }
   }
 
+  // ══════════════════════════════════════════════════
+  // DARS JADVALI, DAVOMAT, O'QITUVCHI OYLIGI
+  // ══════════════════════════════════════════════════
+  const schApi = (path, opts) => api(path, opts, '/api/school');
+  const WD = { 1: 'Dushanba', 2: 'Seshanba', 3: 'Chorshanba', 4: 'Payshanba', 5: 'Juma', 6: 'Shanba', 7: 'Yakshanba' };
+  const ATT = { present: ['Keldi', 'var(--green)'], late: ['Kechikdi', 'var(--gold)'], excused: ['Sababli', 'var(--cyan)'], absent: ['Kelmadi', 'var(--red)'] };
+  const rate = (r) => r == null ? '—' : r + '%';
+  const lessonsTable = (items, editable) => {
+    if (!items.length) return box("// Jadvalda dars yo'q");
+    const byDay = {};
+    items.forEach(l => { (byDay[l.weekday] = byDay[l.weekday] || []).push(l); });
+    return Object.keys(byDay).sort().map(d => `<div class="card" style="margin-bottom:10px;"><div class="ch"><h4>${WD[d]}</h4></div><div class="cb" style="padding:0;"><div class="tw"><table>
+      <tbody>${byDay[d].map(l => `<tr><td style="white-space:nowrap;font-family:'JetBrains Mono',monospace;">${esc(l.start_time)}–${esc(l.end_time)}</td>
+        <td><strong>${esc(l.group_name)}</strong></td><td>${esc(l.subject)}</td><td>${esc(l.teacher_name)}</td><td>${l.room ? 'Xona ' + esc(l.room) : ''}</td>
+        <td>${editable ? `<button class="btn btn-xs btn-danger" title="Olib tashlash" onclick="schRemove('${esc(l.id)}')"><i class="fas fa-trash"></i></button>` : ''}</td></tr>`).join('')}</tbody>
+    </table></div></div></div>`).join('');
+  };
+
+  async function schRender() {
+    const pg = document.getElementById('schedpg'); if (!pg) return;
+    const edit = canManage();
+    const teachers = (DB.teachers || []).filter(t => t.status !== 'pending');
+    pg.innerHTML = `<div class="ph"><h2>DARS JADVALI</h2><p>// Haftalik darslar; o'qituvchi, xona va guruh to'qnashuvi tekshiriladi</p></div>
+      ${edit ? `<div class="card" style="margin-bottom:12px;"><div class="cb" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;">
+        <div>${label('GURUH')}<input class="form-control" id="slGroup" list="slGroupList" style="width:110px;"><datalist id="slGroupList"></datalist></div>
+        <div>${label('FAN')}<input class="form-control" id="slSubject" style="width:130px;" placeholder="Python"></div>
+        <div>${label("O'QITUVCHI")}<select class="form-control" id="slTeacher" style="width:150px;">${teachers.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></div>
+        <div>${label('XONA')}<input class="form-control" id="slRoom" style="width:80px;" placeholder="101"></div>
+        <div>${label('KUN')}<select class="form-control" id="slDay" style="width:120px;">${Object.entries(WD).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+        <div>${label('BOSHLANISH')}<input type="time" class="form-control" id="slStart" value="14:00"></div>
+        <div>${label('TUGASH')}<input type="time" class="form-control" id="slEnd" value="15:30"></div>
+        <button class="btn btn-success btn-sm" onclick="schAdd()"><i class="fas fa-plus"></i> Qo'shish</button>
+      </div></div>` : ''}
+      <div id="schBody">${loading()}</div>`;
+    if (edit) crmApi('/groups').then(out => { const dl = document.getElementById('slGroupList'); if (dl) dl.innerHTML = out.items.map(x => `<option value="${esc(x.name)}">`).join(''); }).catch(() => {});
+    try {
+      const out = await schApi('/lessons');
+      document.getElementById('schBody').innerHTML = lessonsTable(out.items, edit);
+    } catch (e) { document.getElementById('schBody').innerHTML = errorBox(e.message, 'schRender()'); }
+  }
+  async function schAdd() {
+    const v = (id) => document.getElementById(id).value.trim();
+    try {
+      await schApi('/lessons', { method: 'POST', body: JSON.stringify({ group: v('slGroup'), subject: v('slSubject'), teacher_id: Number(v('slTeacher')),
+        room: v('slRoom'), weekday: Number(v('slDay')), start: v('slStart'), end: v('slEnd') }) });
+      showToast("✅ Dars jadvalga qo'shildi"); schRender();
+    } catch (e) { showToast('❌ ' + e.message); }
+  }
+  async function schRemove(id) {
+    if (!confirm("Darsni jadvaldan olib tashlaysizmi?")) return;
+    try { await schApi(`/lessons/${encodeURIComponent(id)}/remove`, { method: 'POST', body: '{}' }); showToast('✅ Olib tashlandi'); schRender(); }
+    catch (e) { showToast('❌ ' + e.message); }
+  }
+
+  const att = { group: '', date: today(), month: thisMonth(), marks: {} };
+  async function attRender() {
+    const pg = document.getElementById('attpg'); if (!pg) return;
+    pg.innerHTML = `<div class="ph"><h2>DAVOMAT</h2><p>// Keldi · kechikdi · sababli · kelmadi — kunlik va oylik statistika</p></div>
+      ${canManage() ? `<div class="card" style="margin-bottom:12px;"><div class="ch"><h4>BUGUNGI DARSLAR</h4></div><div class="cb" id="attToday">${loading()}</div></div>` : ''}
+      <div class="card" style="margin-bottom:12px;"><div class="cb" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;">
+        <div>${label('GURUH')}<select class="form-control" id="attGroup" style="width:140px;" onchange="attPick(this.value)"></select></div>
+        <div>${label('SANA')}<input type="date" class="form-control" id="attDate" value="${att.date}" max="${today()}" onchange="att.date=this.value;attLoadSheet()"></div>
+        <div>${label('OY (STATISTIKA)')}<input type="month" class="form-control" id="attMonth" value="${att.month}" onchange="attSetMonth(this.value)"></div>
+      </div></div>
+      <div id="attSheet"></div><div id="attStats"></div>`;
+    window.att = att;
+    if (canManage()) schApi('/attendance/today').then(out => {
+      document.getElementById('attToday').innerHTML = out.items.length ? `<div class="tw"><table><tbody>${out.items.map(l => `<tr>
+        <td style="font-family:'JetBrains Mono',monospace;">${esc(l.start_time)}</td><td><strong>${esc(l.group_name)}</strong></td><td>${esc(l.teacher_name)}</td>
+        <td>${l.total ? `${l.present + l.late}/${l.group_size} keldi · ${rate(l.rate)}` : '<span style="color:var(--gold)">belgilanmagan</span>'}</td>
+        <td><button class="btn btn-xs" onclick="attPick('${esc(l.group_name)}')">Ochish</button></td></tr>`).join('')}</tbody></table></div>`
+        : box("// Bugun jadvalda dars yo'q");
+    }).catch(e => { document.getElementById('attToday').innerHTML = errorBox(e.message, 'attRender()'); });
+    try {
+      const out = await schApi('/groups');
+      const sel = document.getElementById('attGroup');
+      if (!out.items.length) { document.getElementById('attSheet').innerHTML = box("// Sizga biriktirilgan guruh yo'q"); return; }
+      if (!out.items.includes(att.group)) att.group = out.items[0];
+      sel.innerHTML = out.items.map(n => `<option ${n === att.group ? 'selected' : ''}>${esc(n)}</option>`).join('');
+      attLoadSheet(); attLoadStats();
+    } catch (e) { document.getElementById('attSheet').innerHTML = errorBox(e.message, 'attRender()'); }
+  }
+  function attPick(group) { att.group = group; const sel = document.getElementById('attGroup'); if (sel) sel.value = group; attLoadSheet(); attLoadStats(); }
+  function attSetMonth(m) { att.month = m; attLoadStats(); }
+
+  async function attLoadSheet() {
+    const el = document.getElementById('attSheet'); if (!el || !att.group) return;
+    el.innerHTML = loading();
+    try {
+      const out = await schApi('/attendance/sheet?' + qs({ group: att.group, date: att.date }));
+      att.marks = {};
+      out.items.forEach(s => { if (s.mark) att.marks[s.student_id] = s.mark; });
+      att.sheet = out.items;
+      el.innerHTML = `<div class="card" style="margin-bottom:12px;"><div class="ch" style="flex-wrap:wrap;gap:8px;">
+          <h4>${esc(out.group)} · ${esc(out.date)} ${out.lessons.map(l => `· ${esc(l.subject)} ${esc(l.start_time)}`).join(' ')}</h4>
+          <div style="display:flex;gap:6px;"><button class="btn btn-sm" onclick="attAll('present')">Hammasi keldi</button>
+          <button class="btn btn-cyan btn-sm" id="attSave" onclick="attSave()"><i class="fas fa-save"></i> Saqlash</button></div></div>
+        <div class="cb" style="padding:0;"><div class="tw"><table><tbody id="attRows"></tbody></table></div>
+        ${out.marked_by ? `<div style="font-size:10px;color:var(--text3);padding:8px 14px;">// Oxirgi belgilagan: ${esc(out.marked_by)}</div>` : ''}</div></div>`;
+      attDrawRows();
+    } catch (e) { el.innerHTML = errorBox(e.message, 'attLoadSheet()'); }
+  }
+  function attDrawRows() {
+    const body = document.getElementById('attRows'); if (!body) return;
+    body.innerHTML = (att.sheet || []).map(s => `<tr><td><strong>${esc(s.name)}</strong>${s.status === 'frozen' ? ' <span class="badge bb">MUZLATILGAN</span>' : ''}</td>
+      <td style="white-space:nowrap;">${Object.entries(ATT).map(([k, [t, c]]) => `<button class="btn btn-xs" style="${att.marks[s.student_id] === k ? `background:${c};color:#000;border-color:${c};` : ''}"
+        aria-pressed="${att.marks[s.student_id] === k}" onclick="attMark(${s.student_id},'${k}')">${t}</button>`).join(' ')}</td></tr>`).join('')
+      || `<tr><td>${box("// Guruhda faol o'quvchi yo'q")}</td></tr>`;
+  }
+  function attMark(id, status) { att.marks[id] = status; attDrawRows(); }
+  function attAll(status) { (att.sheet || []).forEach(s => { if (s.status !== 'frozen') att.marks[s.student_id] = status; }); attDrawRows(); }
+  async function attSave() {
+    const marks = Object.entries(att.marks).map(([student_id, status]) => ({ student_id: Number(student_id), status }));
+    if (!marks.length) { showToast("❗ Hech kim belgilanmagan"); return; }
+    const btn = document.getElementById('attSave'); btn.disabled = true;
+    try {
+      const out = await schApi('/attendance', { method: 'POST', body: JSON.stringify({ group: att.group, date: att.date, marks }) });
+      showToast(`✅ Saqlandi: ${out.counts.present} keldi, ${out.counts.late} kechikdi, ${out.counts.excused} sababli, ${out.counts.absent} kelmadi`);
+      attLoadStats();
+    } catch (e) { showToast('❌ ' + e.message); }
+    btn.disabled = false;
+  }
+  async function attLoadStats() {
+    const el = document.getElementById('attStats'); if (!el || !att.group) return;
+    try {
+      const out = await schApi('/attendance/stats?' + qs({ group: att.group, month: att.month }));
+      el.innerHTML = `<div class="card"><div class="ch"><h4>OYLIK STATISTIKA · ${esc(att.month)} · ${rate(out.summary.rate)}</h4></div><div class="cb" style="padding:0;"><div class="tw"><table>
+        <thead><tr><th>O'quvchi</th><th>Keldi</th><th>Kechikdi</th><th>Sababli</th><th>Kelmadi</th><th>Davomat</th></tr></thead>
+        <tbody>${out.students.map(s => `<tr><td>${esc(s.name)}</td><td>${s.present}</td><td>${s.late}</td><td>${s.excused}</td>
+          <td style="color:${s.absent ? 'var(--red)' : ''}">${s.absent}</td><td><strong>${rate(s.rate)}</strong></td></tr>`).join('') || `<tr><td colspan="6">${box("// Ma'lumot yo'q")}</td></tr>`}</tbody>
+      </table></div></div></div>`;
+    } catch (e) { el.innerHTML = errorBox(e.message, 'attLoadStats()'); }
+  }
+
+  async function attRenderMy() {
+    const pg = document.getElementById('myattpg'); if (!pg) return;
+    pg.innerHTML = `<div class="ph"><h2>DAVOMAT VA JADVAL</h2><p>// Darslar jadvali va qatnashish tarixi</p></div>
+      <div style="margin-bottom:12px;">${label('OY')}<input type="month" class="form-control" style="width:170px;" id="myAttMonth" value="${att.month}" onchange="att.month=this.value;attRenderMy()"></div>
+      <div id="myAttBody">${loading()}</div>`;
+    window.att = att;
+    try {
+      const out = await schApi('/attendance/my?' + qs({ month: att.month }));
+      document.getElementById('myAttBody').innerHTML = out.items.map(c => `<div class="card" style="margin-bottom:14px;"><div class="ch"><h4>${esc(c.name)} · ${esc(c.group)}</h4></div><div class="cb">
+        <div class="fin-grid">${stat('DAVOMAT', rate(c.stats.rate), att.month, 'gt')}${stat('KELDI', c.stats.present, '')}${stat('KECHIKDI', c.stats.late, '')}
+          ${stat('SABABLI', c.stats.excused, '')}${stat('KELMADI', c.stats.absent, '', c.stats.absent ? 'rt' : '')}</div>
+        <h4 style="font-size:12px;margin:6px 0;">DARS JADVALI</h4>${lessonsTable(c.lessons, false)}
+        <h4 style="font-size:12px;margin:12px 0 6px;">QATNASHISH</h4>${c.records.map(r => `<div class="fin-line"><span>${esc(r.lesson_date)}</span>
+          <strong style="color:${(ATT[r.status] || ['', ''])[1]}">${(ATT[r.status] || [r.status])[0]}</strong></div>`).join('') || `<div style="color:var(--text3);font-size:12px;">// Bu oyda yozuv yo'q</div>`}
+      </div></div>`).join('') || box(curUser && curUser.role === 'parent' ? "// Bog'langan farzand topilmadi" : "// Ma'lumot yo'q");
+    } catch (e) { document.getElementById('myAttBody').innerHTML = errorBox(e.message, 'attRenderMy()'); }
+  }
+
+  const ruleText = (r) => !r ? '<span style="color:var(--text3)">belgilanmagan</span>'
+    : r.type === 'fixed' ? `Qat'iy ${fmt(r.value)}` : `${r.value / 100}% tushumdan`;
+  const sal = { month: thisMonth() };
+  async function salRender() {
+    const pg = document.getElementById('salpg'); if (!pg) return;
+    pg.innerHTML = `<div class="ph"><h2>O'QITUVCHILAR OYLIGI</h2><p>// Qat'iy maosh yoki o'quvchilar to'lovidan foiz</p></div>
+      <div style="margin-bottom:12px;">${label('OY')}<input type="month" class="form-control" style="width:170px;" value="${sal.month}" onchange="salSetMonth(this.value)"></div>
+      <div id="salBody">${loading()}</div>`;
+    try {
+      const out = await schApi('/salary?' + qs({ month: sal.month }));
+      window.__salRows = out.items;
+      document.getElementById('salBody').innerHTML = `<div class="card"><div class="ch"><h4>JAMI: ${fmt(out.total)}</h4></div><div class="cb" style="padding:0;"><div class="tw"><table>
+        <thead><tr><th>O'qituvchi</th><th>Shart</th><th>O'quvchilar</th><th>Tushum (shu oy)</th><th>Hisoblangan oylik</th><th></th></tr></thead>
+        <tbody>${out.items.map(r => `<tr><td><strong>${esc(r.teacher_name)}</strong></td><td>${ruleText(r.rule)}</td><td>${r.students}</td>
+          <td>${fmt(r.base)} <span style="color:var(--text3);font-size:10px;">(${r.payments_count} ta)</span></td>
+          <td style="font-weight:700;color:var(--green);white-space:nowrap;">${fmt(r.amount)}</td>
+          <td><button class="btn btn-xs btn-cyan" onclick="salOpenRule(${r.teacher_id})"><i class="fas fa-pen"></i> Shart</button></td></tr>`).join('')
+          || `<tr><td colspan="6">${box("// O'qituvchi yo'q")}</td></tr>`}</tbody></table></div>
+        <div style="font-size:10px;color:var(--text3);padding:10px 14px;font-family:'JetBrains Mono',monospace;">// Foizli oylik: shu oyda qabul qilingan, bekor qilinmagan to'lovlardan (to'lov paytidagi o'qituvchiga bog'lanadi)</div></div></div>`;
+    } catch (e) { document.getElementById('salBody').innerHTML = errorBox(e.message, 'salRender()'); }
+  }
+  function salSetMonth(m) { sal.month = m; salRender(); }
+  function salOpenRule(tid) {
+    const r = (window.__salRows || []).find(x => x.teacher_id === tid) || {};
+    const rule = r.rule || {};
+    openGlobalModal(`<div class="modal-title"><i class="fas fa-sack-dollar"></i> Oylik sharti: ${esc(r.teacher_name)}</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div class="form-group" style="flex:1;min-width:140px;">${label('TURI')}<select class="form-control" id="srType">
+          <option value="percent" ${rule.type !== 'fixed' ? 'selected' : ''}>Foiz (tushumdan)</option><option value="fixed" ${rule.type === 'fixed' ? 'selected' : ''}>Qat'iy maosh</option></select></div>
+        <div class="form-group" style="flex:1;min-width:120px;">${label("QIYMAT (% yoki so'm)")}<input class="form-control" id="srValue" inputmode="decimal" value="${rule.type ? (rule.type === 'fixed' ? rule.value : rule.value / 100) : ''}"></div>
+        <div class="form-group" style="flex:1;min-width:130px;">${label('QAYSI OYDAN')}<input type="month" class="form-control" id="srFrom" value="${sal.month}"></div>
+      </div>
+      <div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="closeGlobalModal()">Bekor</button>
+        <button class="btn btn-cyan" style="flex:1;" onclick="salSaveRule(${tid})"><i class="fas fa-check"></i> Saqlash</button></div>`);
+  }
+  async function salSaveRule(tid) {
+    const type = document.getElementById('srType').value;
+    const raw = document.getElementById('srValue').value.replace(/\s/g, '').replace(',', '.');
+    if (raw === '' || isNaN(Number(raw))) { showToast('❗ Qiymatni kiriting'); return; }
+    try {
+      await schApi('/salary/rules', { method: 'POST', body: JSON.stringify({ teacher_id: tid, type, value: raw, effective_from: document.getElementById('srFrom').value }) });
+      closeGlobalModal(); showToast('✅ Shart saqlandi'); salRender();
+    } catch (e) { showToast('❌ ' + e.message); }
+  }
+  async function salRenderMy() {
+    const pg = document.getElementById('mysalpg'); if (!pg) return;
+    pg.innerHTML = `<div class="ph"><h2>OYLIGIM</h2><p>// Shart va shu oy hisoblangan summa</p></div>
+      <div style="margin-bottom:12px;">${label('OY')}<input type="month" class="form-control" style="width:170px;" value="${sal.month}" onchange="sal.month=this.value;salRenderMy()"></div>
+      <div id="mySalBody">${loading()}</div>`;
+    window.sal = sal;
+    try {
+      const r = (await schApi('/salary/my?' + qs({ month: sal.month }))).item;
+      document.getElementById('mySalBody').innerHTML = !r ? box("// Ma'lumot yo'q") : `
+        <div class="fin-grid">${stat('HISOBLANGAN OYLIK', fmt(r.amount), sal.month, 'gt')}${stat('SHART', ruleText(r.rule), '')}
+          ${stat("O'QUVCHILARIM", r.students, 'Faol + muzlatilgan')}${stat('TUSHUM', fmt(r.base), r.payments_count + " ta to'lov")}</div>
+        ${r.rule && r.rule.type === 'percent' ? `<div class="card"><div class="ch"><h4>HISOBGA KIRGAN TO'LOVLAR</h4></div><div class="cb" style="padding:0;"><div class="tw"><table>
+          <tbody>${(r.payments || []).map(x => `<tr><td>${esc(x.day)}</td><td>${esc(x.student_name)}</td><td>${fmt(x.amount)}</td></tr>`).join('') || `<tr><td>${box("// Bu oyda to'lov yo'q")}</td></tr>`}</tbody>
+        </table></div></div></div>` : ''}`;
+    } catch (e) { document.getElementById('mySalBody').innerHTML = errorBox(e.message, 'salRenderMy()'); }
+  }
+
   const css = document.createElement('style');
   css.textContent = `
     .fin-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; margin-bottom:14px; }
     .fin-line { display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid var(--bor2); font-size:12px; }
-    #finpg table td, #finpg table th, #myfinpg table td, #myfinpg table th, #crmpg table td, #crmpg table th { padding:8px 10px; }
+    #finpg table td, #finpg table th, #myfinpg table td, #myfinpg table th, #crmpg table td, #crmpg table th, #schedpg td, #attpg td, #attpg th, #salpg td, #salpg th, #myattpg td { padding:8px 10px; }
     @media (max-width:600px) { #finpg .tab-btn, #crmpg .tab-btn { flex:1 1 30%; } }`;
   document.head.appendChild(css);
 
   Object.assign(window, {
     finRender, finRenderMy, finTab, finApplyRange, finQuickRange, finLoadTab, finSetFilter, finPage, finOpenPayment,
     finFilterSelect, finSubmitPayment, finShowReceipt, finPrintReceipt, finVoid, finOpenExpense, finSubmitExpense,
-    finFeeSearch, finOpenFee, finSubmitFee, finAuditPage, finExport, finApplyCashierNav,
-    crmRender, crmSet, crmPage, crmLoad, crmOpenAction, crmSubmitAction, crmOpenCreate, crmSubmitCreate, crmHistory
+    finFeeSearch, finOpenFee, finSubmitFee, finAuditPage, finExport, finApplyRoleNav,
+    crmRender, crmSet, crmPage, crmLoad, crmOpenAction, crmSubmitAction, crmOpenCreate, crmSubmitCreate, crmHistory,
+    schRender, schAdd, schRemove, attRender, attPick, attSetMonth, attLoadSheet, attMark, attAll, attSave, attRenderMy,
+    salRender, salSetMonth, salOpenRule, salSaveRule, salRenderMy
   });
 })();

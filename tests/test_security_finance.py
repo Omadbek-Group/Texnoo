@@ -27,18 +27,21 @@ def client(monkeypatch):
     monkeypatch.setenv("RATE_LIMIT_WRITE", "100000")
     monkeypatch.setenv("RATE_LIMIT_AUTH", "100000")
     sys.path.insert(0, str(ROOT))
-    for name in ("app", "crm", "finance", "security", "data_database"):
+    for name in ("app", "school", "crm", "finance", "security", "data_database"):
         sys.modules.pop(name, None)
     app_module = importlib.import_module("app")
     data = {
         "students": [
-            {"id": 1001, "name": "Ali Valiyev", "phone": "+998901112233", "email": "ali@x.uz", "password": "pass1", "group": "D1"},
+            {"id": 1001, "name": "Ali Valiyev", "phone": "+998901112233", "email": "ali@x.uz", "password": "pass1", "group": "D1", "teacherId": 2001, "teacherIds": [2001]},
             {"id": 1002, "name": "Vali Aliyev", "phone": "+998901112244", "email": "vali@x.uz", "password": "pass2", "group": "D2"},
         ],
-        "teachers": [{"id": 2001, "name": "Ustoz", "phone": "+998900000001", "password": "teach", "status": "active"}],
+        "teachers": [{"id": 2001, "name": "Ustoz", "phone": "+998900000001", "password": "teach", "status": "active"},
+                     {"id": 2002, "name": "Ustoz2", "phone": "+998900000009", "password": "teach2", "status": "active"}],
         "admins": [
             {"id": 3001, "name": "Admin", "phone": "+998900000002", "password": "admin", "level": "platform_admin"},
             {"id": 3002, "name": "Kassir", "phone": "+998900000003", "password": "cash", "level": "cashier"},
+            {"id": 3003, "name": "Menejer", "phone": "+998900000005", "password": "mgr", "level": "manager"},
+            {"id": 3004, "name": "Boshliq", "phone": "+998900000006", "password": "boss", "level": "director"},
         ],
         "parents": [{"id": 3501, "name": "Ota", "phone": "+998900000004", "password": "par", "childPhones": ["+998901112233"]}],
         "employers": [],
@@ -97,7 +100,7 @@ def test_student_cannot_escalate_or_wipe(client):
 
     admin_h = login(client, "+998900000002", "admin")
     saved = client.get("/api/data", headers=admin_h).get_json()
-    assert {a["id"] for a in saved["admins"]} == {3001, 3002}
+    assert {a["id"] for a in saved["admins"]} == {3001, 3002, 3003, 3004}
     assert {s["id"] for s in saved["students"]} == {1001, 1002}
     assert saved["teachers"][0]["status"] == "active"
     assert next(s for s in saved["students"] if s["id"] == 1002)["phone"] == "+998901112244"
@@ -302,3 +305,77 @@ def test_billable_month():
           {"to_status": "active", "effective_date": "2026-04-03", "created_at": 3}]
     assert [billable_month(ev, m) for m in ("2026-01", "2026-02", "2026-03", "2026-04")] == [True, True, False, True]
     assert billable_month([], "2026-03")
+
+
+# ---------------------------------------------------------------- jadval, davomat, oylik, rollar
+def lesson(client, h, **kw):
+    body = {"group": "D1", "subject": "Python", "teacher_id": 2001, "room": "101", "weekday": 1, "start": "14:00", "end": "15:30"}
+    body.update(kw)
+    return client.post("/api/school/lessons", headers=h, json=body)
+
+
+def test_schedule_conflicts(client):
+    admin = login(client, "+998900000002", "admin")
+    assert lesson(client, admin).status_code == 201
+    assert lesson(client, admin, group="D2", start="15:00", end="16:00", room="102").status_code == 409   # o'qituvchi band
+    assert lesson(client, admin, group="D2", teacher_id=2002, start="15:00", end="16:00").status_code == 409  # xona band
+    assert lesson(client, admin, teacher_id=2002, start="14:30", end="15:00", room="103").status_code == 409  # guruh band
+    assert lesson(client, admin, group="D2", start="15:30", end="17:00").status_code == 201  # ketma-ket, to'qnashmaydi
+    assert lesson(client, admin, group="D2", teacher_id=2002, room="102", weekday=2).status_code == 201
+    assert lesson(client, admin, start="16:00", end="15:00").status_code == 400
+    teacher2 = login(client, "+998900000009", "teach2")
+    assert [l["group_name"] for l in client.get("/api/school/lessons", headers=teacher2).get_json()["items"]] == ["D2"]
+    student = login(client, "+998901112233", "pass1")
+    assert {l["group_name"] for l in client.get("/api/school/lessons", headers=student).get_json()["items"]} == {"D1"}
+    assert lesson(client, teacher2, weekday=3).status_code == 403
+
+
+def test_attendance_access_and_stats(client):
+    teacher = login(client, "+998900000001", "teach")
+    today = __import__("finance")._today().isoformat()
+    body = {"group": "D1", "date": today, "marks": [{"student_id": 1001, "status": "late"}]}
+    assert client.post("/api/school/attendance", headers=teacher, json=body).status_code == 200
+    body["marks"][0]["status"] = "present"   # qayta belgilash yangilaydi, takror yozmaydi
+    assert client.post("/api/school/attendance", headers=teacher, json=body).status_code == 200
+    assert client.post("/api/school/attendance", headers=teacher, json={**body, "group": "D2", "marks": [{"student_id": 1002, "status": "present"}]}).status_code == 403
+    assert client.post("/api/school/attendance", headers=teacher, json={**body, "marks": [{"student_id": 1002, "status": "present"}]}).status_code == 400
+    assert client.post("/api/school/attendance", headers=teacher, json={**body, "date": "2099-01-01"}).status_code == 400
+    stats = client.get("/api/school/attendance/stats?group=D1", headers=teacher).get_json()
+    assert stats["summary"]["total"] == 1 and stats["summary"]["present"] == 1 and stats["summary"]["rate"] == 100
+    my = client.get("/api/school/attendance/my", headers=login(client, "+998901112233", "pass1")).get_json()
+    assert my["items"][0]["records"][0]["status"] == "present"
+    parent = client.get("/api/school/attendance/my", headers=login(client, "+998900000004", "par")).get_json()
+    assert [i["student_id"] for i in parent["items"]] == [1001]
+    manager = login(client, "+998900000005", "mgr")
+    assert client.post("/api/school/attendance", headers=manager, json={**body, "group": "D2", "marks": [{"student_id": 1002, "status": "absent"}]}).status_code == 200
+    assert client.get("/api/school/attendance/sheet?group=D1", headers=login(client, "+998900000003", "cash")).status_code == 403
+
+
+def test_teacher_salary_percent_and_fixed(client):
+    admin = login(client, "+998900000002", "admin")
+    month = __import__("finance")._this_month()
+    assert client.post("/api/school/salary/rules", headers=admin, json={"teacher_id": 2001, "type": "percent", "value": "30", "effective_from": month}).status_code == 201
+    assert client.post("/api/school/salary/rules", headers=admin, json={"teacher_id": 2002, "type": "fixed", "value": 2000000, "effective_from": month}).status_code == 201
+    assert client.post("/api/school/salary/rules", headers=admin, json={"teacher_id": 2002, "type": "percent", "value": 150}).status_code == 400
+    client.post("/api/finance/payments", headers=admin, json={"student_id": 1001, "amount": 1000000, "method": "cash", "idempotency_key": key()})
+    void_id = client.post("/api/finance/payments", headers=admin, json={"student_id": 1001, "amount": 500000, "method": "cash", "idempotency_key": key()}).get_json()["payment"]["id"]
+    client.post(f"/api/finance/payments/{void_id}/void", headers=admin, json={"reason": "xato"})
+    rows = {r["teacher_id"]: r for r in client.get("/api/school/salary", headers=admin).get_json()["items"]}
+    assert rows[2001]["base"] == 1000000 and rows[2001]["amount"] == 300000
+    assert rows[2002]["amount"] == 2000000
+    teacher = login(client, "+998900000001", "teach")
+    my = client.get("/api/school/salary/my", headers=teacher).get_json()["item"]
+    assert my["amount"] == 300000 and len(my["payments"]) == 1
+    assert client.get("/api/school/salary", headers=teacher).status_code == 403
+    assert client.get("/api/school/salary", headers=login(client, "+998900000005", "mgr")).status_code == 403
+    assert client.get("/api/school/salary", headers=login(client, "+998900000006", "boss")).status_code == 200
+
+
+def test_manager_and_director_roles(client):
+    manager = login(client, "+998900000005", "mgr")
+    director = login(client, "+998900000006", "boss")
+    assert client.post("/api/crm/students", headers=manager, json={"firstName": "M", "lastName": "N", "phone": "+998907771111", "group": "D1"}).status_code == 201
+    assert client.get("/api/finance/summary", headers=manager).status_code == 403
+    assert client.post("/api/finance/payments", headers=manager, json={"student_id": 1001, "amount": 1, "method": "cash", "idempotency_key": key()}).status_code == 403
+    assert client.get("/api/finance/summary", headers=director).status_code == 200
+    assert client.get("/api/finance/audit", headers=director).status_code == 200
