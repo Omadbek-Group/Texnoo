@@ -13,6 +13,7 @@ Asosiy takomillashtirishlar (eski koddan farqi):
 import json
 import logging
 import os
+import re
 import threading
 import time
 import urllib.error
@@ -23,6 +24,7 @@ from collections import defaultdict, deque
 from pathlib import Path
 # DB utilities
 from data_database import (
+    DATA_DIR,
     authenticate_user,
     get_all_data,
     get_storage_health,
@@ -33,10 +35,17 @@ from data_database import (
 )
 from typing import Any, Optional
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, abort, g, jsonify, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
+
+import crm
+import exams
+import school
+from crm import ARCHIVED, record_events, student_status
+from finance import audit, bp as finance_bp, init_finance_db
+from security import is_full_admin, issue_token, require_auth
 
 # --------------------------------------------------------------------------
 # Logging
@@ -142,7 +151,12 @@ STUDENT_DEFAULTS = {
     "Shavkatov Abdulatif": {"group": "D1", "coins": 5},
 }
 
-app = Flask(__name__, static_folder=str(Config.BASE_DIR), static_url_path="")
+# Built-in static route o'chirilgan: u loyiha papkasini (baza, .env, kod) to'liq ochib qo'yardi.
+app = Flask(__name__, static_folder=None)
+app.register_blueprint(finance_bp)
+app.register_blueprint(crm.bp)
+app.register_blueprint(school.bp)
+app.register_blueprint(exams.bp)
 app.config["MAX_CONTENT_LENGTH"] = Config.MAX_UPLOAD_SIZE
 if Config.CORS_ALLOW_ALL:
     CORS(app, resources={r"/*": {"origins": "*"}})
@@ -378,10 +392,35 @@ def require_admin(data: dict, admin_id: Any) -> Optional[dict]:
     return admin
 
 
+crm.configure(lambda: read_data(), lambda d: write_data(d), normalize_data, _data_lock)
+
+
 def init_data_file() -> None:
     """Initialize databases and migrate legacy JSON if it exists."""
     init_data_db()
     migrate_json_to_db(Config.DATA_FILE)
+    init_finance_db()
+    # Admin kirishini env orqali tiklash: shu login bilan admin bo'lsa paroli yangilanadi, bo'lmasa
+    # Platform Admin yaratiladi. Kirgandan keyin env o'zgaruvchilarni o'chiring (aks holda har restartda qayta o'rnatiladi).
+    login = os.environ.get("INITIAL_ADMIN_LOGIN", "").strip()
+    password = os.environ.get("INITIAL_ADMIN_PASSWORD", "")
+    if login and len(password) >= 8:
+        with _data_lock:
+            data = read_data()
+            admins = data.setdefault("admins", [])
+            match = next((a for a in admins if isinstance(a, dict) and (
+                (a.get("phone") and _norm_phone(a["phone"]) == _norm_phone(login))
+                or str(a.get("email") or "").strip().lower() == login.lower())), None)
+            if match:
+                match["password"] = password
+                logger.info("Admin paroli env orqali yangilandi: %s", login)
+            else:
+                is_email = "@" in login
+                admins.append({"id": max([n_int(a.get("id")) for a in admins] + [3000]) + 1, "name": "Platform Admin",
+                               "level": "platform_admin", "password": password,
+                               "email": login if is_email else "", "phone": "" if is_email else login})
+                logger.info("Platform Admin env orqali yaratildi: %s", login)
+            write_data(data)
 
 
 def read_data() -> dict:
@@ -579,10 +618,135 @@ def health():
     }), 200 if ok else 503
 
 
+_ACCOUNT_COLLECTIONS = {"students": "student", "teachers": "teacher", "admins": "admin",
+                        "parents": "parent", "employers": "employer"}
+# Boshqa hisoblarning shaxsiy/huquq maydonlari: oddiy foydalanuvchi ularni o'zgartira olmaydi.
+_PROTECTED_FIELDS = ("name", "firstName", "lastName", "phone", "email", "code", "status", "level",
+                     "childPhone", "childPhones", "centerId", "parentPhone", "birthDate", "address", "extraGroups")
+
+
+def _is_self(principal: dict, role: str, item: dict) -> bool:
+    return principal["role"] == role and n_int(item.get("id")) == principal["id"]
+
+
 @app.route("/api/data", methods=["GET"])
+@require_auth()
 def get_data():
-    """Bazalardan ma'lumotni o'qib beradi."""
-    return jsonify(read_data())
+    """Bazalardan ma'lumotni o'qib beradi (faqat tizimga kirganlarga)."""
+    data = read_data()
+    p = g.principal
+    if p["role"] in {"student", "employer", "parent"}:
+        # Talaba/ish beruvchi boshqalarning telefon/emailini ko'rmaydi. Ota-ona farzandini
+        # telefon orqali bog'lagani uchun telefonlar qoladi, emaillar yashiriladi.
+        for key, role in _ACCOUNT_COLLECTIONS.items():
+            for item in data.get(key, []):
+                if isinstance(item, dict) and not _is_self(p, role, item):
+                    item["email"] = ""
+                    item["address"] = ""
+                    item["parentPhone"] = ""
+                    item["birthDate"] = ""
+                    if p["role"] != "parent":
+                        item["phone"] = ""
+    # Bitirgan/ketgan o'quvchilar arxivda: ular faqat CRM sahifasida (/api/crm) ko'rinadi.
+    data["students"] = [s for s in data.get("students", []) if not (
+        isinstance(s, dict) and student_status(s) in ARCHIVED and not _is_self(p, "student", s))]
+    return jsonify(data)
+
+
+def guard_dataset_write(current: dict, incoming: dict, principal: dict) -> tuple[dict, list[dict]]:
+    """Klient yuborgan to'liq datasetni rolga qarab cheklaydi.
+
+    - Parol faqat /api/auth/* orqali o'zgaradi: mavjud hisoblar uchun yuborilgan parol e'tiborsiz.
+    - To'liq admin bo'lmagan foydalanuvchi: hisob o'chira olmaydi, admin ro'yxati va
+      sozlamalarni o'zgartira olmaydi, o'qituvchi tasdiqlash holatini o'zgartira olmaydi.
+    - Talaba/ota-ona/ish beruvchi: boshqalarning shaxsiy maydonlarini o'zgartira olmaydi
+      va yangi hisob qo'sha olmaydi (ro'yxatdan o'tish /api/auth/register orqali).
+    - Server tomondagi kalitlar (masalan currencyExchanges) klient yubormasa ham saqlanadi.
+    - Talaba holati faqat CRM orqali o'zgaradi; talaba o'chirilmaydi — "ketgan" holatiga arxivlanadi.
+      Qaytaradi: (dataset, CRM hodisalari) — guruh o'zgarishi va yangi talabalar tarixga yoziladi.
+    """
+    full_admin = is_full_admin(principal)
+    staff = full_admin or principal["role"] == "teacher"
+    out = dict(incoming)
+    for key, value in current.items():
+        if key not in out:
+            out[key] = value
+
+    for key, role in _ACCOUNT_COLLECTIONS.items():
+        cur_items = {n_int(x.get("id")): x for x in current.get(key, []) if isinstance(x, dict)}
+        merged = []
+        seen = set()
+        for item in out.get(key, []) if isinstance(out.get(key), list) else []:
+            if not isinstance(item, dict):
+                continue
+            item_id = n_int(item.get("id"))
+            if not item_id or item_id in seen:
+                continue
+            existing = cur_items.get(item_id)
+            if existing is None:
+                # Yangi hisob: faqat admin (har qanday) yoki o'qituvchi (faqat talaba) qo'sha oladi.
+                if not (full_admin or (principal["role"] == "teacher" and role == "student")):
+                    continue
+                if not full_admin and role == "student":
+                    item.pop("centerId", None)
+            else:
+                item = dict(item)
+                item.pop("password", None)
+                item.pop("pass", None)
+                if not full_admin:
+                    is_self = _is_self(principal, role, item)
+                    for field in _PROTECTED_FIELDS:
+                        if staff and role == "student" and field not in {"status", "centerId"}:
+                            continue
+                        if is_self and field not in {"status", "level", "centerId", "code"}:
+                            continue
+                        if field in existing:
+                            item[field] = existing[field]
+                        else:
+                            item.pop(field, None)
+            seen.add(item_id)
+            merged.append(item)
+        if not full_admin:
+            merged += [x for i, x in cur_items.items() if i not in seen]
+        out[key] = merged
+
+    if principal.get("level") != "platform_admin":
+        # Admin hisoblari (daraja, kassir qo'shish) faqat Platform Admin qo'lida.
+        out["admins"] = current.get("admins", [])
+    if not full_admin:
+        out["settings"] = current.get("settings", {})
+    if not staff:
+        # Baholarni faqat o'qituvchi/admin qo'yadi.
+        out["homeworkGrades"] = current.get("homeworkGrades", [])
+
+    events: list[dict] = []
+    cur_students = {n_int(x.get("id")): x for x in current.get("students", []) if isinstance(x, dict)}
+    kept = set()
+    for item in out["students"]:
+        sid = n_int(item.get("id"))
+        kept.add(sid)
+        existing = cur_students.get(sid)
+        if existing is None:
+            item["status"] = "active"
+            events.append({"student_id": sid, "type": "enrolled", "to_group": item.get("group") or "D1",
+                           "to_status": "active", "source": "legacy"})
+            continue
+        item["status"] = student_status(existing)
+        old_group, new_group = str(existing.get("group") or ""), str(item.get("group") or "")
+        if old_group != new_group:
+            events.append({"student_id": sid, "type": "group_changed", "from_group": old_group,
+                           "to_group": new_group, "source": "legacy"})
+    for sid, existing in cur_students.items():
+        if sid in kept:
+            continue
+        restored = dict(existing)
+        if student_status(existing) not in ARCHIVED:
+            restored["status"] = "left"
+            events.append({"student_id": sid, "type": "status_changed", "from_status": student_status(existing),
+                           "to_status": "left", "from_group": existing.get("group"), "to_group": existing.get("group"),
+                           "reason": "O'chirish o'rniga arxivlandi", "source": "legacy"})
+        out["students"].append(restored)
+    return out, events
 
 
 @app.route("/api/auth/login", methods=["POST"])
@@ -601,23 +765,109 @@ def auth_login():
         return jsonify({"status": "error", "message": "Login yoki parol noto'g'ri"}), 401
 
     user = dict(result["user"])
+    if result["role"] == "teacher" and user.get("status") == "pending":
+        return jsonify({"status": "error", "message": "Hisobingiz hali Platform Admin tomonidan tasdiqlanmagan"}), 403
     user["pass"] = ""
     user["password"] = ""
+    token = issue_token(result["role"], n_int(user.get("id")))
+    if not token:
+        return jsonify({"status": "error", "message": "Sessiya yaratilmadi"}), 500
+    audit({"role": result["role"], "id": n_int(user.get("id")), "name": user.get("name", ""),
+           "center": str(user.get("centerId") or "main")}, "auth.login")
     return jsonify({
         "status": "success",
         "role": result["role"],
         "user": user,
+        "token": token,
     })
 
 
+_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+_PHONE_RE = re.compile(r"^[+\d][\d\s\-()]{6,20}$")
+
+
+def _norm_phone(value: Any) -> str:
+    return re.sub(r"[\s\-()]", "", str(value or "")).lower()
+
+
+@app.route("/api/auth/register", methods=["POST"])
+def auth_register():
+    """Ro'yxatdan o'tish serverda: hisob shu yerda yaratiladi, klient butun bazani yozmaydi."""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"status": "error", "message": "JSON obyekt yuboring"}), 400
+    role = str(body.get("role", "")).strip()
+    if role not in {"student", "teacher", "parent", "employer"}:
+        return jsonify({"status": "error", "message": "Rol noto'g'ri"}), 400
+    first = str(body.get("firstName", "")).strip()[:60]
+    last = str(body.get("lastName", "")).strip()[:60]
+    company = str(body.get("company", "")).strip()[:120]
+    phone = str(body.get("phone", "")).strip()[:24]
+    email = str(body.get("email", "")).strip()[:120]
+    password = str(body.get("password", ""))
+    avatar = str(body.get("avatar", ""))
+    if role == "employer":
+        if not company:
+            return jsonify({"status": "error", "message": "Kompaniya nomini kiriting"}), 400
+        first, last = company, ""
+    elif not first or not last:
+        return jsonify({"status": "error", "message": "Ism va familiyani kiriting"}), 400
+    if not phone and not email:
+        return jsonify({"status": "error", "message": "Telefon yoki emaildan kamida bittasini kiriting"}), 400
+    if email and not _EMAIL_RE.match(email):
+        return jsonify({"status": "error", "message": "Email formati noto'g'ri"}), 400
+    if phone and not _PHONE_RE.match(phone):
+        return jsonify({"status": "error", "message": "Telefon formati noto'g'ri"}), 400
+    if len(password) < 4 or len(password) > 128:
+        return jsonify({"status": "error", "message": "Parol kamida 4 ta belgidan iborat bo'lsin"}), 400
+    if avatar and (not avatar.startswith(("data:image/", "uploads/")) or len(avatar) > 1_500_000):
+        avatar = ""
+
+    with _data_lock:
+        data = read_data()
+        accounts = [a for key in ("students", "teachers", "admins", "parents", "employers")
+                    for a in data.get(key, []) if isinstance(a, dict)]
+        for acc in accounts:
+            if phone and acc.get("phone") and _norm_phone(acc["phone"]) == _norm_phone(phone):
+                return jsonify({"status": "error", "message": "Bu telefon yoki email allaqachon ro'yxatdan o'tgan"}), 409
+            if email and acc.get("email") and str(acc["email"]).strip().lower() == email.lower():
+                return jsonify({"status": "error", "message": "Bu telefon yoki email allaqachon ro'yxatdan o'tgan"}), 409
+        used_ids = {n_int(a.get("id")) for a in accounts}
+        new_id = int(time.time() * 1000)
+        while new_id in used_ids:
+            new_id += 1
+        record = {
+            "id": new_id, "firstName": first, "lastName": last, "name": f"{first} {last}".strip(),
+            "phone": phone, "email": email, "password": password, "avatar": avatar,
+        }
+        if role == "student":
+            record.update({"totalCoins": 0, "level": 1, "streak": 0, "refCode": f"REF{new_id}"})
+        elif role == "teacher":
+            record.update({"status": "pending", "subject": "", "subj": ""})
+        elif role == "parent":
+            record.update({"childPhones": [], "childPhone": ""})
+        else:
+            record.update({"company": company})
+        data.setdefault(f"{role}s", []).append(record)
+        data, _ = normalize_data(data)
+        write_data(data)
+    audit({"role": role, "id": new_id, "name": record["name"]}, "auth.register", role, new_id)
+    if role == "student":
+        record_events(None, [{"student_id": new_id, "type": "enrolled", "to_group": record.get("group") or "D1",
+                              "to_status": "active", "source": "register"}])
+    return jsonify({"status": "success", "role": role, "id": new_id}), 201
+
+
 @app.route("/api/auth/change-password", methods=["POST"])
+@require_auth()
 def auth_change_password():
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         return jsonify({"status": "error", "message": "JSON obyekt yuboring"}), 400
 
-    role = str(body.get("role", "")).strip().lower()
-    account_id = n_int(body.get("accountId"))
+    # Kim ekanligi tokendan olinadi — body'dagi role/accountId boshqa hisobni nishonga ololmaydi.
+    role = g.principal["role"]
+    account_id = g.principal["id"]
     old_password = str(body.get("oldPassword", ""))
     new_password = str(body.get("newPassword", ""))
     if not role or not account_id or not old_password or not new_password:
@@ -628,12 +878,15 @@ def auth_change_password():
     if not update_user_password(role, account_id, old_password, new_password):
         return jsonify({"status": "error", "message": "Joriy parol noto'g'ri"}), 401
 
-    return jsonify({"status": "success", "message": "Parol yangilandi"})
+    audit(g.principal, "auth.change_password")
+    # Eski tokenlar parol bilan birga bekor bo'ladi, shu qurilma uchun yangisini beramiz.
+    return jsonify({"status": "success", "message": "Parol yangilandi", "token": issue_token(role, account_id)})
 
 
 @app.route("/api/data", methods=["POST"])
+@require_auth()
 def save_data():
-    """Frontend'dan kelgan ma'lumotni bazalarga saqlaydi."""
+    """Frontend'dan kelgan ma'lumotni rol cheklovlari bilan bazalarga saqlaydi."""
     req_data = request.get_json(silent=True)
     valid, message = validate_dataset_payload(req_data)
     if not valid:
@@ -641,8 +894,16 @@ def save_data():
     if not all(k in req_data for k in ("students", "transactions", "nextStudentId")):
         return jsonify({"status": "error", "message": "Majburiy maydonlar yetishmayapti"}), 400
 
-    req_data, _ = normalize_data(req_data)
-    storage = write_data(req_data)
+    with _data_lock:
+        current = read_data()
+        cur_count = sum(1 for s in current.get("students", []) if student_status(s) not in ARCHIVED)
+        if cur_count >= 10 and len(req_data.get("students", [])) < cur_count // 2:
+            # Eskirgan/demo nusxa butun bazani ustidan yozib yubormasligi uchun.
+            return jsonify({"status": "error", "message": "Saqlash rad etildi: talabalarning yarmidan ko'pi o'chib ketardi. Sahifani yangilang."}), 409
+        req_data, events = guard_dataset_write(current, req_data, g.principal)
+        req_data, _ = normalize_data(req_data)
+        storage = write_data(req_data)
+    record_events(g.principal, events)
     return jsonify({
         "status": "success",
         "message": "Ma'lumot saqlandi",
@@ -651,6 +912,7 @@ def save_data():
 
 
 @app.route("/api/chat/state", methods=["GET"])
+@require_auth()
 def get_chat_state():
     data = read_data()
     return jsonify({
@@ -660,6 +922,7 @@ def get_chat_state():
 
 
 @app.route("/api/chat/state", methods=["POST"])
+@require_auth()
 def save_chat_state():
     body = request.get_json(silent=True)
     valid, message = validate_chat_payload(body)
@@ -682,13 +945,12 @@ def save_chat_state():
 
 
 @app.route("/api/admin/import-json", methods=["POST"])
+@require_auth("admin")
 def import_json():
     """Admin uchun JSON import: validate -> normalize -> SQLite + PostgreSQL."""
-    admin_id = n_int(request.form.get("adminId"))
+    admin_id = g.principal["id"]
     import_file = request.files.get("file")
 
-    if not admin_id:
-        return jsonify({"status": "error", "message": "Admin ID kerak"}), 400
     if not import_file or not import_file.filename:
         return jsonify({"status": "error", "message": "JSON fayl tanlanmadi"}), 400
 
@@ -722,6 +984,7 @@ def import_json():
 
         imported, _ = normalize_data(imported)
         storage = write_data(imported)
+    audit(g.principal, "data.import_json", "dataset", "", summarize_dataset(imported))
 
     return jsonify({
         "status": "success",
@@ -733,6 +996,7 @@ def import_json():
 
 
 @app.route("/api/market/state", methods=["GET"])
+@require_auth()
 def market_state():
     """Talabaning joriy tanga/olmos balansi va inventarini serverdan qaytaradi.
 
@@ -742,6 +1006,8 @@ def market_state():
     student_id = n_int(request.args.get("studentId"))
     if not student_id:
         return jsonify({"ok": False, "error": "unauthorized"}), 400
+    if g.principal["role"] == "student" and student_id != g.principal["id"]:
+        return jsonify({"ok": False, "error": "forbidden"}), 403
 
     with _data_lock:
         data = read_data()
@@ -759,6 +1025,7 @@ def market_state():
 
 
 @app.route("/api/currency/exchange", methods=["POST"])
+@require_auth("student")
 def currency_exchange():
     """Tanga <-> Olmos almashinuvini serverda, atomik tarzda amalga oshiradi.
 
@@ -774,7 +1041,9 @@ def currency_exchange():
     if not isinstance(body, dict):
         return jsonify({"ok": False, "error": "invalid_amount"}), 400
 
-    student_id = n_int(body.get("studentId"))
+    student_id = g.principal["id"]
+    if n_int(body.get("studentId"), student_id) != student_id:
+        return jsonify({"ok": False, "error": "forbidden"}), 403
     direction = str(body.get("direction", "")).strip()
     amount = n_int(body.get("amount"))
 
@@ -835,6 +1104,7 @@ def currency_exchange():
 
 
 @app.route("/api/admin/exchange-rate", methods=["POST"])
+@require_auth("admin")
 def admin_exchange_rate():
     """Admin uchun: Tanga<->Olmos kurslarini o'zgartirish (standart: 10 / 15).
 
@@ -844,7 +1114,7 @@ def admin_exchange_rate():
     if not isinstance(body, dict):
         return jsonify({"ok": False, "error": "invalid_amount"}), 400
 
-    admin_id = n_int(body.get("adminId"))
+    admin_id = g.principal["id"]
 
     with _data_lock:
         data = read_data()
@@ -869,6 +1139,7 @@ def admin_exchange_rate():
 
         write_data(data)
         c2d_rate, d2c_rate = get_exchange_rates(data)
+    audit(g.principal, "settings.exchange_rate", "settings", "", {"c2d": c2d_rate, "d2c": d2c_rate})
 
     return jsonify({"ok": True, "state": {
         "coinToDiamondRate": c2d_rate,
@@ -878,6 +1149,7 @@ def admin_exchange_rate():
 
 
 @app.route("/api/ai/chat", methods=["POST"])
+@require_auth()
 def ai_chat():
     """Chat ichidagi /texno komandasi uchun ChatGPT javobi."""
     if not Config.OPENAI_API_KEY:
@@ -910,37 +1182,15 @@ def ai_chat():
                 messages.append({"role": role, "content": content[:1200]})
     messages.append({"role": "user", "content": prompt})
 
-    payload = {
-        "model": Config.OPENAI_MODEL,
-        "messages": messages,
-        "temperature": 0.4,
-        "max_tokens": 700,
-    }
-    body = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        "https://api.openai.com/v1/chat/completions",
-        data=body,
-        method="POST",
-        headers={
-            "Authorization": f"Bearer {Config.OPENAI_API_KEY}",
-            "Content-Type": "application/json",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=35) as res:
-            out = json.loads(res.read().decode("utf-8"))
-        answer = out.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-        return jsonify({"status": "success", "answer": answer or "Javob topilmadi"})
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", errors="ignore")
-        logger.warning("OpenAI API xatosi: %s", detail)
-        return jsonify({"status": "error", "message": detail or str(e)}), 502
-    except Exception as e:  # noqa: BLE001
-        logger.exception("OpenAI so'rovida kutilmagan xato")
-        return jsonify({"status": "error", "message": str(e)}), 502
+    answer, error = school.ask_openai(messages)
+    if error:
+        logger.warning("OpenAI API xatosi: %s", error)
+        return jsonify({"status": "error", "message": error}), 502
+    return jsonify({"status": "success", "answer": answer})
 
 
 @app.route("/api/telegram-link/request", methods=["POST"])
+@require_auth()
 def request_telegram_link():
     req_data = request.get_json(silent=True)
     if not isinstance(req_data, dict):
@@ -951,6 +1201,8 @@ def request_telegram_link():
     telegram_id = n_int(req_data.get("telegramId"))
     if role not in {"student", "teacher", "admin"} or not account_id or not telegram_id:
         return jsonify({"status": "error", "message": "Role, profil ID va Telegram ID kerak"}), 400
+    if role != g.principal["role"] or account_id != g.principal["id"]:
+        return jsonify({"status": "error", "message": "Faqat o'z profilingizni ulay olasiz"}), 403
 
     # Race condition oldini olish uchun lock ichida o'qish + yozish
     with _data_lock:
@@ -1011,6 +1263,7 @@ def request_telegram_link():
 
 
 @app.route("/api/upload", methods=["POST"])
+@require_auth()
 def upload_file():
     """Xavfsiz fayl yuklash: faqat ruxsat etilgan extensiyalar, secure_filename bilan."""
     if "file" not in request.files:
@@ -1049,6 +1302,7 @@ def uploaded_file(filename: str):
 
 
 @app.route("/api/sms", methods=["POST"])
+@require_auth("admin", "cashier", "teacher")
 def send_sms():
     """SMS yuborish. SMS_GATEWAY_URL mavjud bo'lsa, tashqi xizmatga yuboradi, aks holda log."""
     req_data = request.get_json(silent=True)
@@ -1084,13 +1338,27 @@ def send_sms():
 
 
 # Boshqa statik fayllarni (rasm, css, js) topib berish uchun - eng oxirida bo'lishi kerak
+_BLOCKED_STATIC = re.compile(
+    r"(^|/)(\.|__pycache__|node_modules)"
+    r"|\.(py|pyc|sqlite3?|db|log|toml|env|ps1|docx)$"
+    r"|^(requirements\.txt|Todo\.json|package(-lock)?\.json|exam_bank\.json)$",
+    re.IGNORECASE,
+)
+
+
 @app.route("/<path:path>")
 def static_files(path: str):
+    # Kod, baza, maxfiy fayllar va DATA_DIR ichidagi hech narsa tashqariga berilmaydi.
+    target = (Config.BASE_DIR / path).resolve()
+    if _BLOCKED_STATIC.search(path) or target.is_relative_to(Path(DATA_DIR).resolve()):
+        abort(404)
     return send_from_directory(str(Config.BASE_DIR), path)
 
 
 init_data_file()
 start_telegram_bot()
+if Config.BOT_TOKEN and Config.RUN_TELEGRAM_BOT:
+    school.start_birthday_job(send_bot_message)
 
 if __name__ == "__main__":
     debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"

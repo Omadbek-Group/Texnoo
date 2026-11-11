@@ -4157,6 +4157,7 @@
         <div class="g2" style="margin-bottom:0;">
           <div class="form-group"><label>Har bir to'g'ri javob uchun tanga</label><input type="number" class="form-control" id="tstCoin" value="10" min="1"></div>
           <div class="form-group"><label>Vaqt chegarasi (daqiqa, 0 = cheklanmagan)</label><input type="number" class="form-control" id="tstTimeLimit" value="0" min="0"></div>
+          <div class="form-group"><label>Kimga</label><select class="form-control" id="tstTarget"></select></div>
         </div>
         <div class="card" style="margin:0 0 14px;border-left:3px solid var(--purple);">
           <div class="ch" style="padding:9px 12px;"><h4 style="font-size:11px;">📋 WORD/PDF'DAN NUSXALAB IMPORT QILISH</h4></div>
@@ -4412,6 +4413,8 @@
         <div class="nav-item" onclick="showPage('chatpg',this,'CHAT')"><i class="fas fa-comments"></i> Chat <span
             class="badge-notif" id="sChatBadge" style="display:none;">0</span></div>
         <div class="nav-item" onclick="showPage('matpg',this,'DARSLIK VA KITOBLAR')"><i class="fas fa-book"></i> Darsliklar</div>
+        <div class="nav-item" onclick="showPage('myfinpg',this,'TO\'LOVLARIM')"><i class="fas fa-receipt"></i> To'lovlarim</div>
+        <div class="nav-item" onclick="showPage('myattpg',this,'DAVOMAT VA JADVAL')"><i class="fas fa-calendar-check"></i> Davomat va jadval</div>
         <div class="nav-item" onclick="showPage('settpg',this,'SOZLAMALAR')"><i class="fas fa-gear"></i> Sozlamalar</div>
         <div class="nav-sec">Karyera</div>
         <div class="nav-item" onclick="showPage('certspg',this,'SERTIFIKATLARIM')"><i class="fas fa-certificate" style="color:var(--gold);"></i> Sertifikatlarim</div>
@@ -4420,6 +4423,7 @@
         <div class="nav-item" onclick="showPage('hpg',this,'FAOLLIK TARIXI')"><i class="fas fa-history"></i> Faollik
           tarixi</div>
         <div class="nav-item" onclick="showPage('testspg',this,'TESTLAR')"><i class="fas fa-file-alt"></i> Testlar</div>
+        <div class="nav-item" onclick="showPage('examspg',this,'CEFR VA SAT IMTIHONLARI')"><i class="fas fa-file-signature" style="color:var(--gold);"></i> CEFR va SAT</div>
         <div class="nav-item" onclick="showPage('codepg',this,'KOD YOZISH')"><i class="fas fa-laptop-code"></i> Kod yozish</div>
         <div class="nav-item" onclick="showPage('slpg',this,'DARS MAVZUSI')"><i class="fas fa-book-open"></i> Dars mavzusi</div>
         <div class="nav-item" onclick="showPage('hwspg',this,'VAZIFALARIM')"><i class="fas fa-tasks"></i> Vazifalarim <span class="badge-notif" id="hwPendingBadge" style="display:none;">0</span></div>
@@ -4444,11 +4448,14 @@
         <div class="nav-item" onclick="showPage('grppg',this,'GURUHLAR')"><i class="fas fa-layer-group"></i> Guruhlar
         </div>
         <div class="nav-item" onclick="showPage('coursespg',this,'KURSLAR')"><i class="fas fa-graduation-cap"></i> Kurslar</div>
+        <div class="nav-item" onclick="showPage('mystudpg',this,'O\'QUVCHILARIM')"><i class="fas fa-user-graduate" style="color:var(--cyan);"></i> O'quvchilarim</div>
+        <div class="nav-item" onclick="showPage('attpg',this,'DAVOMAT')"><i class="fas fa-user-check" style="color:var(--green);"></i> Davomat</div>
+        <div class="nav-item" onclick="showPage('schedpg',this,'DARS JADVALIM')"><i class="fas fa-calendar-week"></i> Dars jadvalim</div>
+        <div class="nav-item" onclick="showPage('examadmpg',this,'IMTIHONLAR (CEFR, SAT)')"><i class="fas fa-file-signature" style="color:var(--gold);"></i> Imtihonlar (CEFR, SAT)</div>
+        <div class="nav-item" onclick="showPage('mysalpg',this,'OYLIGIM')"><i class="fas fa-sack-dollar" style="color:var(--gold);"></i> Oyligim</div>
         <div class="nav-item" onclick="showPage('lpg',this,'ISH REJA')"><i class="fas fa-book-open"></i> Ish reja (mavzu)</div>
         <div class="nav-item" onclick="showPage('hwmgrpg',this,'VAZIFA BERISH')"><i class="fas fa-tasks"></i> Vazifa berish</div>
         <div class="nav-item" onclick="showPage('matmgrpg',this,'DARSLIK/KITOB')"><i class="fas fa-book"></i> Darslik/Kitob</div>
-        <div class="nav-item" onclick="showPage('paypg',this,'TO\'LOV HISOBOTI')"><i class="fas fa-money-bill-wave"></i>
-          To'lov hisoboti</div>
         <div class="nav-item" onclick="showPage('testmgrpg',this,'TEST BOSHQARUVI')"><i class="fas fa-vial"></i> Test
           boshqaruvi</div>
         <div class="nav-item" onclick="showPage('aiassistpg',this,'AI YORDAMCHI')"><i class="fas fa-robot" style="color:var(--green);"></i> AI Yordamchi</div>
@@ -4462,16 +4469,22 @@
       <!-- ADMIN NAV -->
       <nav class="app-nav" id="aNav" style="display:none;">
         <div class="nav-sec">Admin paneli</div>
+        <div class="nav-item" onclick="showPage('dashpg',this,'BOSH PANEL')"><i class="fas fa-gauge-high" style="color:var(--cyan);"></i> Bosh panel</div>
         <div class="nav-item active" onclick="showPage('admpg',this,'ADMIN PANEL')"><i
             class="fas fa-tachometer-alt"></i> Dashboard</div>
         <div class="nav-item" onclick="showPage('stpg',this,'TALABALAR')"><i class="fas fa-users"></i> Barcha talabalar
         </div>
+        <div class="nav-item" onclick="showPage('crmpg',this,'O\'QUVCHILAR (CRM)')"><i class="fas fa-address-book" style="color:var(--cyan);"></i> O'quvchilar (CRM)</div>
+        <div class="nav-item" onclick="showPage('schedpg',this,'DARS JADVALI')"><i class="fas fa-calendar-week" style="color:var(--cyan);"></i> Dars jadvali</div>
+        <div class="nav-item" onclick="showPage('attpg',this,'DAVOMAT')"><i class="fas fa-user-check" style="color:var(--green);"></i> Davomat</div>
+        <div class="nav-item" onclick="showPage('examadmpg',this,'IMTIHONLAR (CEFR, SAT)')"><i class="fas fa-file-signature" style="color:var(--gold);"></i> Imtihonlar (CEFR, SAT)</div>
+        <div class="nav-item" onclick="showPage('aicenterpg',this,'AI YORDAMCHI')"><i class="fas fa-robot" style="color:var(--green);"></i> AI yordamchi</div>
+        <div class="nav-item" onclick="showPage('salpg',this,'O\'QITUVCHILAR OYLIGI')"><i class="fas fa-sack-dollar" style="color:var(--gold);"></i> O'qituvchilar oyligi</div>
         <div class="nav-item" onclick="showPage('newsmgrpg',this,'YANGILIKLAR')"><i class="fas fa-newspaper"></i> Yangiliklar</div>
         <div class="nav-item" onclick="showPage('chatpg',this,'CHAT')"><i class="fas fa-comments"></i> Chat</div>
         <div class="nav-item" onclick="showPage('tpg',this,'O\'QITUVCHILAR')"><i class="fas fa-chalkboard-teacher"></i>
           O'qituvchilar</div>
-        <div class="nav-item" onclick="showPage('paypg',this,'TO\'LOVLAR')"><i class="fas fa-money-bill-wave"></i>
-          To'lovlar</div>
+        <div class="nav-item" data-fin-nav="1" onclick="showPage('finpg',this,'MOLIYA VA KASSA')"><i class="fas fa-wallet" style="color:var(--green);"></i> Moliya va kassa</div>
         <div class="nav-item" onclick="showPage('monpg',this,'MONITORING')"><i class="fas fa-eye"></i> Monitoring</div>
         <div class="nav-item" onclick="showPage('certsadminpg',this,'SERTIFIKATLAR')"><i class="fas fa-certificate" style="color:var(--gold);"></i> Sertifikatlar</div>
         <div class="nav-item" onclick="showPage('ejobsadminpg',this,'ISH E\'LONLARI')"><i class="fas fa-briefcase" style="color:var(--cyan);"></i> Ish e'lonlari</div>
@@ -4486,6 +4499,8 @@
       <nav class="app-nav" id="pNav" style="display:none;">
         <div class="nav-sec">Ota-ona kabineti</div>
         <div class="nav-item active" onclick="showPage('parentChildPg',this,'FARZANDIM')"><i class="fas fa-child"></i> Farzandim</div>
+        <div class="nav-item" onclick="showPage('myfinpg',this,'TO\'LOVLAR')"><i class="fas fa-receipt"></i> To'lovlar</div>
+        <div class="nav-item" onclick="showPage('myattpg',this,'DAVOMAT VA JADVAL')"><i class="fas fa-calendar-check"></i> Davomat va jadval</div>
         <div class="nav-item" onclick="showPage('tapg',this,'PROFIL')"><i class="fas fa-id-card"></i> Profil</div>
         <div class="nav-item" onclick="showPage('settpg',this,'SOZLAMALAR')"><i class="fas fa-gear"></i> Sozlamalar</div>
         <div class="nav-sec">Hisob</div>
@@ -4687,6 +4702,20 @@
 
       <!-- PAGES WRAP -->
       <div class="pc" id="pageWrap">
+        <!-- Moliya sahifalari: mazmuni finance-ui.js tomonidan serverdan chiziladi -->
+        <div class="page" id="finpg"></div>
+        <div class="page" id="myfinpg"></div>
+        <div class="page" id="crmpg"></div>
+        <div class="page" id="schedpg"></div>
+        <div class="page" id="attpg"></div>
+        <div class="page" id="salpg"></div>
+        <div class="page" id="mysalpg"></div>
+        <div class="page" id="myattpg"></div>
+        <div class="page" id="mystudpg"></div>
+        <div class="page" id="aicenterpg"></div>
+        <div class="page" id="dashpg"></div>
+        <div class="page" id="examspg"></div>
+        <div class="page" id="examadmpg"></div>
 
         <!-- TALABA BOSH SAHIFA -->
         <div class="page active" id="dpg">
@@ -5334,13 +5363,13 @@
           </div>
           <div class="g2" style="margin-bottom:14px;">
             <div class="card" style="margin:0;border-left:3px solid var(--cyan);">
-              <div class="ch"><h4>👥 GURUHGA VAZIFA</h4></div>
+              <div class="ch"><h4>👥 GURUHGA YOKI BARCHA O'QUVCHILARGA</h4></div>
               <div class="cb">
                 <div class="form-group"><label>GURUH</label>
                   <select id="hwGrpGroupSel" class="form-control"></select></div>
                 <div class="form-group"><label>SARLAVHA</label><input class="form-control" id="hwGrpTitle" placeholder="Masalan: 5-bob mashqlari"></div>
                 <div class="form-group"><label>TAVSIF</label><textarea class="form-control" id="hwGrpDesc" rows="2" placeholder="Vazifa tafsiloti"></textarea></div>
-                <div class="form-group"><label>MUDDAT</label><input type="date" class="form-control" id="hwGrpDue"></div>
+                <div class="form-group"><label>MUDDAT</label><input type="datetime-local" class="form-control" id="hwGrpDue"></div>
                 <button class="btn btn-cyan" style="width:100%;" onclick="assignHomework('group')"><i class="fas fa-paper-plane"></i> Guruhga berish</button>
               </div>
             </div>
@@ -5351,7 +5380,7 @@
                   <select id="hwStuSel" class="form-control"></select></div>
                 <div class="form-group"><label>SARLAVHA</label><input class="form-control" id="hwStuTitle" placeholder="Masalan: Qo'shimcha mashq"></div>
                 <div class="form-group"><label>TAVSIF</label><textarea class="form-control" id="hwStuDesc" rows="2" placeholder="Vazifa tafsiloti"></textarea></div>
-                <div class="form-group"><label>MUDDAT</label><input type="date" class="form-control" id="hwStuDue"></div>
+                <div class="form-group"><label>MUDDAT</label><input type="datetime-local" class="form-control" id="hwStuDue"></div>
                 <button class="btn btn-sm" style="width:100%;background:rgba(191,95,255,.2);border:1px solid rgba(191,95,255,.3);color:var(--purple);font-weight:700;" onclick="assignHomework('student')"><i class="fas fa-paper-plane"></i> Talabaga berish</button>
               </div>
             </div>
@@ -5689,6 +5718,7 @@
 
         <!-- YANGI: YANGILIKLAR (NEWS) — barcha rollar uchun umumiy lenta -->
         <div class="page" id="newspg">
+          <div id="eduNews"></div>
           <div id="newsWrap"></div>
         </div>
 
@@ -5923,28 +5953,6 @@
           <div class="g2">
             <div class="card">
               <div class="ch">
-                <h4>TIZIM HOLATI</h4>
-              </div>
-              <div class="cb">
-                <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
-                  <div
-                    style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bor2);">
-                    <span style="color:var(--text3);font-family:'JetBrains Mono',monospace;">Server holati</span><span
-                      class="badge gr">FAOL ✅</span>
-                  </div>
-                  <div
-                    style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bor2);">
-                    <span style="color:var(--text3);font-family:'JetBrains Mono',monospace;">Ma'lumotlar
-                      bazasi</span><span class="badge gr">ULANGAN ✅</span>
-                  </div>
-                  <div style="display:flex;justify-content:space-between;padding:8px 0;"><span
-                      style="color:var(--text3);font-family:'JetBrains Mono',monospace;">Tizim versiyasi</span><span
-                      style="color:var(--cyan);font-family:'JetBrains Mono',monospace;">v3.1</span></div>
-                </div>
-              </div>
-            </div>
-            <div class="card">
-              <div class="ch">
                 <h4>TEZKOR AMALLAR</h4>
               </div>
               <div class="cb" style="display:flex;flex-direction:column;gap:8px;">
@@ -5952,7 +5960,7 @@
                   Talabalar ro'yxati</button>
                 <button class="btn btn-gold" onclick="showPage('tpg',null,'O\'QITUVCHILAR')"><i
                     class="fas fa-chalkboard-teacher"></i> O'qituvchilar</button>
-                <button class="btn" onclick="showPage('paypg',null,'TO\'LOVLAR')"><i class="fas fa-money-bill-wave"></i>
+                <button class="btn" onclick="showPage('finpg',null,'MOLIYA VA KASSA')"><i class="fas fa-money-bill-wave"></i>
                   To'lovlar hisoboti</button>
                 <button class="btn" onclick="openExchangeRateSettingsModal()"><i class="fas fa-right-left"></i>
                   Valyuta kursi sozlamasi</button>
@@ -6004,6 +6012,9 @@
                   <select id="naLevel" class="form-control" style="width:150px;">
                     <option value="school_admin">School Admin</option>
                     <option value="platform_admin">Platform Admin</option>
+                    <option value="director">Boshliq</option>
+                    <option value="manager">Menejer</option>
+                    <option value="cashier">Kassir</option>
                   </select>
                 </div>
                 <div><label style="font-size:10px;color:var(--text3);display:block;margin-bottom:4px;font-family:'JetBrains Mono',monospace;">PAROL</label>
@@ -6232,6 +6243,7 @@
     // ══════════════════════════════════════════════════
     // DATA
     // ══════════════════════════════════════════════════
+    const ADMIN_LEVEL_LABEL = { platform_admin: 'Platform Admin', school_admin: 'School Admin', director: 'Boshliq', manager: 'Menejer', cashier: 'Kassir' };
     const DB = {
       students: [],
       teachers: [],
@@ -6244,6 +6256,36 @@
       courses: [], // YANGI: Course → Module → Lesson strukturasi (Kurs → Modul → Dars)
       settings: { exchangeRate: 5, schoolName: "Teacher_texno EdTech Platform" } // 1 Olmos (💎) = 5 Tanga (🪙), admin tomonidan sozlanadi
     };
+
+    // ── Server sessiyasi: login paytida berilgan token har bir /api so'roviga qo'shiladi ──
+    const TOKEN_KEY = 'teacherTexnoToken';
+    let serverDataLoaded = false; // faqat serverdan kelgan ma'lumot serverga qayta yoziladi (demo/eski nusxa emas)
+    function getAuthToken() { try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; } }
+    function setAuthToken(t) { try { if (t) sessionStorage.setItem(TOKEN_KEY, t); else sessionStorage.removeItem(TOKEN_KEY); } catch (e) {} }
+    (function () {
+      const nativeFetch = window.fetch.bind(window);
+      let expiredShown = false;
+      window.fetch = function (input, init) {
+        const url = typeof input === 'string' ? input : (input && input.url) || '';
+        const isApi = url.startsWith('/api/') || url.startsWith(location.origin + '/api/');
+        const token = getAuthToken();
+        if (isApi && token) {
+          init = { ...(init || {}) };
+          const headers = new Headers(init.headers || (typeof input !== 'string' && input.headers) || {});
+          if (!headers.has('Authorization')) headers.set('Authorization', 'Bearer ' + token);
+          init.headers = headers;
+        }
+        return nativeFetch(input, init).then(res => {
+          if (isApi && res.status === 401 && token && !url.includes('/api/auth/') && curUser && !expiredShown) {
+            expiredShown = true;
+            setTimeout(() => { expiredShown = false; }, 3000);
+            doLogout();
+            showToast('🔒 Sessiya tugadi, qayta kiring');
+          }
+          return res;
+        });
+      };
+    })();
 
     // ── AUTH: barcha rollar uchun umumiy yordamchi funksiyalar ──
     // Har bir hisob: firstName, lastName, phone, email, avatar (dataURL), pass maydonlariga ega bo'lishi mumkin.
@@ -6433,6 +6475,7 @@
         news: DB.news || [],
         homeworks: DB.homeworks || [],
         homeworkSubmissions: DB.homeworkSubmissions || [],
+        homeworkGrades: DB.homeworkGrades || [],
         lessonPlans: DB.lessonPlans || [],
         courses: DB.courses || [],
         settings: DB.settings || { exchangeRate: 5, schoolName: "Teacher_texno EdTech Platform" }
@@ -6527,6 +6570,7 @@
       DB.news = Array.isArray(data.news) ? data.news : [];
       DB.homeworks = Array.isArray(data.homeworks) ? data.homeworks : [];
       DB.homeworkSubmissions = Array.isArray(data.homeworkSubmissions) ? data.homeworkSubmissions : [];
+      DB.homeworkGrades = Array.isArray(data.homeworkGrades) ? data.homeworkGrades : [];
       DB.lessonPlans = Array.isArray(data.lessonPlans) ? data.lessonPlans : [];
       DB.courses = Array.isArray(data.courses) ? data.courses : [];
       DB.settings = (data.settings && typeof data.settings === 'object') ? { exchangeRate: 5, schoolName: "Teacher_texno EdTech Platform", ...data.settings } : { exchangeRate: 5, schoolName: "Teacher_texno EdTech Platform" };
@@ -6543,10 +6587,12 @@
           const data = await res.json();
           if (hasRealData(data)) {
             applyLoadedData(data);
+            serverDataLoaded = true;
             try {
               const chatRes = await fetch('/api/chat/state', { cache: 'no-store' });
               const chatOut = await chatRes.json().catch(() => ({}));
-              if (chatRes.ok && chatOut.chat) applyLoadedData(chatOut.chat);
+              // Chat holati faqat chat kalitlarini yangilaydi; qolgan ma'lumot (vazifa, test, guruh...) o'chib ketmasin.
+              if (chatRes.ok && chatOut.chat) applyLoadedData({ ...data, ...chatOut.chat });
             } catch (e) {
               console.warn('Chat state backenddan olinmadi', e);
             }
@@ -6588,6 +6634,7 @@
         } catch (e) {
           console.warn('localStorage saqlashda xatolik', e);
         }
+        if (!serverDataLoaded || !getAuthToken()) return; // demo/eski nusxa server bazasini ustidan yozmasin
 
         // Backend mavjud bo'lsa, unga ham yuboramiz
         try {
@@ -6615,6 +6662,7 @@
         } catch (e) {
           console.warn('localStorage saqlashda xatolik', e);
         }
+        if (!serverDataLoaded || !getAuthToken()) return; // demo/eski nusxa server bazasini ustidan yozmasin
 
         let mainSaved = false;
         try {
@@ -6900,6 +6948,7 @@
         .then(res => res.json().catch(() => ({})).then(out => ({ ok: res.ok, out })))
         .then(({ ok, out }) => {
           if (!ok) throw new Error(out.message || "Joriy parol noto'g'ri");
+          if (out.token) setAuthToken(out.token);
           closeGlobalModal();
           showToast('✅ Parol muvaffaqiyatli yangilandi');
         })
@@ -6944,11 +6993,15 @@
         body: JSON.stringify({ identifier, password })
       })
         .then(res => res.json().catch(() => ({})).then(out => ({ ok: res.ok, out })))
-        .then(({ ok, out }) => {
+        .then(async ({ ok, out }) => {
           if (!ok) throw new Error(out.message || "Login yoki parol noto'g'ri");
           if (out.role === 'teacher' && out.user && out.user.status === 'pending') {
             throw new Error("Hisobingiz hali Platform Admin tomonidan tasdiqlanmagan");
           }
+          setAuthToken(out.token || '');
+          serverDataLoaded = false;
+          await loadData();
+          if (!serverDataLoaded) showToast("⚠ Server ma'lumoti yuklanmadi — o'zgarishlar saqlanmaydi");
           curUser = { ...(out.user || {}), role: out.role };
           document.getElementById('loginScreen').style.display = 'none';
           document.getElementById('topbar').style.display = 'flex';
@@ -7058,41 +7111,34 @@
       if (phone && !/^[+\d][\d\s\-()]{6,20}$/.test(phone)) { showToast("❗ Telefon formati noto'g'ri"); return; }
       if (!pass || pass.length < 4) { showToast("❗ Parol kamida 4 ta belgidan iborat bo'lsin"); return; }
       if (pass !== passConfirm) { showToast("❌ Parollar bir-biriga mos emas"); return; }
-      if (identifierTaken(phone, email)) { showToast('❌ Bu telefon yoki email allaqachon ro\'yxatdan o\'tgan'); return; }
-
-      const base = {
-        id: Date.now(),
-        firstName, lastName,
-        name: (firstName + ' ' + lastName).trim(),
-        phone, email,
-        pass,
-        avatar: regAvatarData || ''
-      };
-
-      if (role === 'student') {
-        DB.students.push(uiStudent(base));
-      } else if (role === 'teacher') {
-        DB.teachers.push(uiTeacher({ ...base, status: 'pending' }));
-      } else if (role === 'parent') {
-        DB.parents.push(uiParent(base));
-      } else if (role === 'employer') {
-        DB.employers.push(uiEmployer({ ...base, company }));
-      }
-      saveData();
-      closeGlobalModal();
-      if (role === 'teacher') {
-        showToast("✅ Ro'yxatdan o'tdingiz! Hisobingiz Platform Admin tasdiqlashini kutmoqda.");
-      } else {
-        showToast("✅ Ro'yxatdan muvaffaqiyatli o'tdingiz! Endi tizimga kirishingiz mumkin.");
-      }
-      const idEl = document.getElementById('lgIdentifier');
-      if (idEl) idEl.value = phone || email;
+      // Hisob serverda yaratiladi (telefon/email bandligi ham serverda tekshiriladi).
+      fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role, firstName, lastName, company, phone, email, password: pass, avatar: regAvatarData || '' })
+      })
+        .then(res => res.json().catch(() => ({})).then(out => ({ ok: res.ok, out })))
+        .then(({ ok, out }) => {
+          if (!ok) throw new Error(out.message || "Ro'yxatdan o'tib bo'lmadi");
+          closeGlobalModal();
+          if (role === 'teacher') {
+            showToast("✅ Ro'yxatdan o'tdingiz! Hisobingiz Platform Admin tasdiqlashini kutmoqda.");
+          } else {
+            showToast("✅ Ro'yxatdan muvaffaqiyatli o'tdingiz! Endi tizimga kirishingiz mumkin.");
+          }
+          const idEl = document.getElementById('lgIdentifier');
+          if (idEl) idEl.value = phone || email;
+        })
+        .catch(e => showToast('❌ ' + (e.message || "Ro'yxatdan o'tib bo'lmadi")));
     }
     window.submitRegistration = submitRegistration;
     function doLogout() {
       stopMarketSync();
       curUser = null; curChat = null;
       clearSession();
+      setAuthToken('');
+      serverDataLoaded = false;
+      try { localStorage.removeItem(LOCAL_KEY); } catch (e) {}
       document.getElementById('topbar').style.display = 'none';
       document.getElementById('appShell').style.display = 'none';
       document.getElementById('loginScreen').style.display = 'flex';
@@ -7125,6 +7171,7 @@
     function restoreSession() {
       const sess = readSession();
       if (!sess || !sess.role || sess.id === undefined || sess.id === null) return false;
+      if (!getAuthToken() || !serverDataLoaded) { clearSession(); return false; }
       let list = sess.role === 'student' ? DB.students : sess.role === 'teacher' ? DB.teachers : sess.role === 'admin' ? DB.admins : sess.role === 'parent' ? DB.parents : sess.role === 'employer' ? DB.employers : null;
       if (!list) return false;
       const user = list.find(x => String(x.id) === String(sess.id));
@@ -7149,11 +7196,15 @@
       const avHtml = curUser.avatar ? `<img src="${curUser.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">` : ini;
       document.getElementById('sbAv').innerHTML = avHtml;
       document.getElementById('sbNm').textContent = curUser.name;
-      const roleLabel = r === 'student' ? "// Talaba" : r === 'teacher' ? "// O'qituvchi" : r === 'parent' ? "// Ota-ona" : r === 'employer' ? "// Ish beruvchi" : ("// Admin — " + (curUser.level === 'platform_admin' ? 'Platform' : 'Maktab'));
+      const roleLabel = r === 'student' ? "// Talaba" : r === 'teacher' ? "// O'qituvchi" : r === 'parent' ? "// Ota-ona" : r === 'employer' ? "// Ish beruvchi" : ("// " + (ADMIN_LEVEL_LABEL[curUser.level] || 'School Admin'));
       document.getElementById('sbRl').textContent = roleLabel;
       document.getElementById('tbCoins').textContent = '🪙 ' + (curUser.coins || 0);
       document.getElementById('tbDiamonds').textContent = '💎 ' + diamonds;
       const swapBtn = document.getElementById('tbSwapBtn'); if (swapBtn) swapBtn.style.display = (r === 'student') ? 'flex' : 'none';
+      ['tbCoins', 'tbDiamonds'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = r === 'student' ? '' : 'none'; });
+      if (r === 'student' && curUser.birthDate && curUser.birthDate.slice(5) === new Date().toISOString().slice(5, 10)) {
+        setTimeout(() => mToast(`Hurmatli ${escHtml(curUser.name)}, tug'ilgan kuningiz bilan tabriklaymiz! O'qishlaringizda omad! 🎉`, 'ach', "🎂 Tug'ilgan kun muborak!"), 1200);
+      }
       const csAvEl = document.getElementById('csMyAv'); if (csAvEl) csAvEl.innerHTML = avHtml;
       document.getElementById('csMyName').textContent = curUser.name;
       document.getElementById('csCoins').textContent = diamonds;
@@ -7161,10 +7212,12 @@
       saveData();
       applyThemeFromPrefs();
       if (r === 'student') { initS(); showPage('dpg', null, 'BOSH SAHIFA'); }
-      else if (r === 'teacher') { initT(); showPage('adpg', null, 'STATISTIKA'); }
+      else if (r === 'teacher') { initT(); showPage('adpg', null, 'STATISTIKA'); remindPending(); }
       else if (r === 'parent') { initP(); showPage('parentChildPg', null, 'FARZANDIM'); }
       else if (r === 'employer') { initE(); showPage('ejobspg', null, "ISH E'LONLARIM"); }
-      else { initA(); showPage('admpg', null, 'ADMIN DASHBOARD'); }
+      else if (curUser.level === 'cashier') { finApplyRoleNav('cashier'); showPage('finpg', null, 'MOLIYA VA KASSA'); }
+      else if (curUser.level === 'manager') { finApplyRoleNav('manager'); showPage('dashpg', null, 'BOSH PANEL'); }
+      else { finApplyRoleNav(''); initA(); showPage('dashpg', null, 'BOSH PANEL'); }
       renderCChats(); renderCFriends(); renderCReqs(); renderCMarket();
       initEP(); initSP(); initReactPick(); renderMktPage(); fillCoinSelects();
       // Talaba bo'lsa — coin/olmos/inventar/equip holatini serverdan tortib,
@@ -7826,7 +7879,7 @@
       saveData();
       document.getElementById('naName').value = ''; document.getElementById('naIdentifier').value = ''; document.getElementById('naPass').value = '';
       renderAdminAccountsTable();
-      showToast('✅ ' + name + " qo'shildi (" + (level === 'platform_admin' ? 'Platform Admin' : 'School Admin') + ')');
+      showToast('✅ ' + name + " qo'shildi (" + (ADMIN_LEVEL_LABEL[level] || 'School Admin') + ')');
     }
     window.addAdminAccount = addAdminAccount;
     function renderAdminAccountsTable() {
@@ -7834,7 +7887,7 @@
       body.innerHTML = DB.admins.map((a, i) => `<tr>
         <td style="font-family:'JetBrains Mono',monospace;color:var(--text3);">${i + 1}</td>
         <td><strong>${a.name}</strong></td>
-        <td><span class="badge ${a.level === 'platform_admin' ? 'gr' : 'bb'}">${a.level === 'platform_admin' ? 'Platform Admin' : 'School Admin'}</span></td>
+        <td><span class="badge ${a.level === 'platform_admin' ? 'gr' : 'bb'}">${ADMIN_LEVEL_LABEL[a.level] || 'School Admin'}</span></td>
         <td style="font-size:11px;color:var(--text2);">${a.email || a.phone || '—'}</td>
         <td><code style="background:var(--card2);padding:2px 6px;border-radius:4px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--cyan);">${a.pass}</code></td>
         <td>${DB.admins.length > 1 ? `<button class="btn btn-xs btn-danger" onclick="deleteAdminAccount(${a.id})"><i class="fas fa-trash"></i></button>` : '—'}</td>
@@ -8267,7 +8320,7 @@
       const s = DB.students.find(x => x.id === id); if (!s) return;
       openGlobalModal(`
         <div class="modal-title">🗑️ ${String(s.name || '').replace(/</g, '&lt;')}ni o'chirish</div>
-        <p style="color:var(--text2);margin:10px 0 18px;">Bu amalni bekor qilib bo'lmaydi. Rostdan ham o'chirmoqchimisiz?</p>
+        <p style="color:var(--text2);margin:10px 0 18px;">Talaba ro'yxatdan olinadi va "Ketganlar" arxiviga o'tadi (CRM bo'limida). Tarix va to'lovlar saqlanadi.</p>
         <div style="display:flex;gap:8px;">
           <button class="btn" style="flex:1;" onclick="closeGlobalModal()">Bekor</button>
           <button class="btn btn-danger" style="flex:1;" onclick="confirmDeleteStud(${id})"><i class="fas fa-trash"></i> O'chirish</button>
@@ -8509,7 +8562,7 @@
       if (curUser?.role === 'teacher') students = students.filter(s => studentTeacherIds(s).includes(String(curUser.id)));
       if (grpSel) {
         const groups = [...new Set(students.map(s => s.group || 'D1'))].sort();
-        grpSel.innerHTML = groups.map(g => `<option value="${g}">${g}</option>`).join('');
+        grpSel.innerHTML = `<option value="__all__">👥 Barcha o'quvchilarim</option>` + groups.map(g => `<option value="${g}">${g}</option>`).join('');
       }
       if (stuSel) stuSel.innerHTML = students.map(s => `<option value="${s.id}">${s.name} (${s.group || '—'})</option>`).join('');
     }
@@ -8521,9 +8574,10 @@
         const desc = document.getElementById('hwGrpDesc').value.trim();
         const due = document.getElementById('hwGrpDue').value;
         if (!group || !title) { showToast('❗ Guruh va sarlavhani kiriting'); return; }
-        DB.homeworks.push({ id: 'hw' + Date.now(), teacherId: curUser.id, targetType: 'group', targetGroup: group, title, desc, due, createdAt: Date.now() });
+        const all = group === '__all__';
+        DB.homeworks.push({ id: 'hw' + Date.now(), teacherId: curUser.id, targetType: all ? 'all' : 'group', targetGroup: all ? '' : group, title, desc, due, createdAt: Date.now() });
         ['hwGrpTitle', 'hwGrpDesc', 'hwGrpDue'].forEach(id => document.getElementById(id).value = '');
-        showToast(`✅ "${title}" vazifasi ${group} guruhiga berildi`);
+        showToast(all ? `✅ "${title}" vazifasi barcha o'quvchilaringizga berildi` : `✅ "${title}" vazifasi ${group} guruhiga berildi`);
       } else {
         const sid = parseInt(document.getElementById('hwStuSel').value);
         const title = document.getElementById('hwStuTitle').value.trim();
@@ -8539,7 +8593,8 @@
     }
     function hwIsForStudent(hw, student) {
       if (hw.targetType === 'student') return hw.targetStudentId === student.id;
-      return (student.group || 'D1') === hw.targetGroup;
+      if (hw.targetType === 'all') return studentTeacherIds(student).includes(String(hw.teacherId));
+      return (student.group || 'D1') === hw.targetGroup || (Array.isArray(student.extraGroups) && student.extraGroups.includes(hw.targetGroup));
     }
     function hwSubmitted(hwId, studentId) {
       return (DB.homeworkSubmissions || []).some(x => x.homeworkId === hwId && x.studentId === studentId);
@@ -8549,15 +8604,17 @@
       const mine = (DB.homeworks || []).filter(h => h.teacherId === curUser.id).sort((a, b) => b.createdAt - a.createdAt);
       if (!mine.length) { body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:16px;font-family:\'JetBrains Mono\',monospace;">// Vazifa yo\'q</td></tr>'; return; }
       body.innerHTML = mine.map(h => {
-        const targets = h.targetType === 'group' ? DB.students.filter(s => (s.group || 'D1') === h.targetGroup) : [DB.students.find(s => s.id === h.targetStudentId)].filter(Boolean);
+        const targets = h.targetType === 'student' ? [DB.students.find(s => s.id === h.targetStudentId)].filter(Boolean) : DB.students.filter(s => hwIsForStudent(h, s));
         const doneCount = targets.filter(s => hwSubmitted(h.id, s.id)).length;
-        const whoLabel = h.targetType === 'group' ? `👥 ${h.targetGroup} guruhi` : `👤 ${targets[0]?.name || '—'}`;
+        const graded = (DB.homeworkGrades || []).filter(g => g.homeworkId === h.id).length;
+        const whoLabel = h.targetType === 'all' ? "👥 Barcha o'quvchilarim" : h.targetType === 'group' ? `👥 ${h.targetGroup} guruhi` : `👤 ${targets[0]?.name || '—'}`;
         return `<tr>
           <td><strong>${h.title}</strong>${h.desc ? `<br><span style="font-size:10px;color:var(--text3);">${h.desc.slice(0, 50)}</span>` : ''}</td>
           <td>${whoLabel}</td>
-          <td style="font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace;">${h.due || '—'}</td>
+          <td style="font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace;">${(h.due || '—').replace('T', ' ')}</td>
           <td><span class="badge ${doneCount === targets.length ? 'gr' : 'bg'}">${doneCount}/${targets.length} bajardi</span></td>
-          <td><button class="btn btn-xs btn-danger" onclick="deleteHomework('${h.id}')"><i class="fas fa-trash"></i></button></td>
+          <td style="white-space:nowrap;"><button class="btn btn-xs btn-gold" title="Baholash" onclick="hwOpenGrades('${h.id}')"><i class="fas fa-star"></i> ${graded}/${targets.length}</button>
+            <button class="btn btn-xs btn-danger" onclick="deleteHomework('${h.id}')"><i class="fas fa-trash"></i></button></td>
         </tr>`;
       }).join('');
     }
@@ -8581,12 +8638,13 @@
         pendingList.innerHTML = '<div style="color:var(--text3);font-size:12px;font-family:\'JetBrains Mono\',monospace;">// Bajarilmagan vazifa yo\'q — barakalla! 🎉</div>';
       } else {
         pendingList.innerHTML = pending.map(h => {
-          const overdue = h.due && new Date(h.due) < new Date(new Date().toDateString());
+          const overdue = h.due && new Date(h.due.length > 10 ? h.due : h.due + 'T23:59') < new Date();
           return `<div class="req-card" style="border-left:3px solid ${overdue ? 'var(--red)' : 'var(--gold)'};">
             <div style="font-weight:700;font-size:13px;">${h.title}</div>
             ${h.desc ? `<div style="font-size:12px;color:var(--text2);margin-top:4px;">${h.desc}</div>` : ''}
+            ${hwGradeBadge(h.id)}
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap;gap:6px;">
-              <span style="font-size:10px;color:${overdue ? 'var(--red)' : 'var(--text3)'};font-family:'JetBrains Mono',monospace;">${h.due ? (overdue ? '⏰ Muddat o\'tgan: ' + h.due : 'Muddat: ' + h.due) : "Muddat belgilanmagan"}</span>
+              <span style="font-size:10px;color:${overdue ? 'var(--red)' : 'var(--text3)'};font-family:'JetBrains Mono',monospace;">${h.due ? (overdue ? '⏰ Muddat o\'tgan: ' + h.due.replace('T', ' ') : 'Muddat: ' + h.due.replace('T', ' ')) : "Muddat belgilanmagan"}</span>
               <button class="btn btn-xs btn-success" onclick="submitHomework('${h.id}')"><i class="fas fa-check"></i> Bajardim</button>
             </div>
           </div>`;
@@ -8595,6 +8653,7 @@
       doneList.innerHTML = done.length ? done.map(h => `
         <div class="req-card" style="opacity:.6;">
           <div style="font-weight:700;font-size:13px;text-decoration:line-through;">${h.title}</div>
+          ${hwGradeBadge(h.id)}
         </div>`).join('') : '<div style="color:var(--text3);font-size:12px;font-family:\'JetBrains Mono\',monospace;">// Hali bajarilgan vazifa yo\'q</div>';
     }
     function submitHomework(hwId) {
@@ -9764,6 +9823,20 @@
       if (id === 'coursespg') { try { renderCoursesPage(); } catch (e) { console.warn('COURSESPG render:', e); } }
       if (id === 'aitutorpg') { try { renderAiTutorChat(); } catch (e) { console.warn('AITUTOR render:', e); } }
       if (id === 'parentChildPg') { try { renderParentDashboard(); } catch (e) { console.warn('PARENTPG render:', e); } }
+      if (id === 'finpg') { try { finRender(); } catch (e) { console.warn('FIN render:', e); } }
+      if (id === 'myfinpg') { try { finRenderMy(); } catch (e) { console.warn('MYFIN render:', e); } }
+      if (id === 'crmpg') { try { crmRender(); } catch (e) { console.warn('CRM render:', e); } }
+      if (id === 'schedpg') { try { schRender(); } catch (e) { console.warn('SCHED render:', e); } }
+      if (id === 'attpg') { try { attRender(); } catch (e) { console.warn('ATT render:', e); } }
+      if (id === 'salpg') { try { salRender(); } catch (e) { console.warn('SAL render:', e); } }
+      if (id === 'mysalpg') { try { salRenderMy(); } catch (e) { console.warn('MYSAL render:', e); } }
+      if (id === 'myattpg') { try { attRenderMy(); } catch (e) { console.warn('MYATT render:', e); } }
+      if (id === 'mystudpg') { try { studRender(); } catch (e) { console.warn('MYSTUD render:', e); } }
+      if (id === 'newspg') { try { eduNewsRender(); } catch (e) { console.warn('EDUNEWS render:', e); } }
+      if (id === 'aicenterpg') { try { aiRender(); } catch (e) { console.warn('AI render:', e); } }
+      if (id === 'dashpg') { try { dashRender(); } catch (e) { console.warn('DASH render:', e); } }
+      if (id === 'examspg') { try { exRender(); } catch (e) { console.warn('EXAM render:', e); } }
+      if (id === 'examadmpg') { try { exAdmRender(); } catch (e) { console.warn('EXAMADM render:', e); } }
       if (id === 'certspg') { try { renderCertificatesList(); } catch (e) { console.warn('CERTSPG render:', e); } }
       if (id === 'certsadminpg') { try { renderCertsAdmin(); } catch (e) { console.warn('CERTSADMIN render:', e); } }
       if (id === 'jobspg') { try { renderStudentJobsPage(); } catch (e) { console.warn('JOBSPG render:', e); } }
@@ -10724,6 +10797,10 @@
       document.getElementById('tstTitle').value = '';
       document.getElementById('tstCoin').value = 10;
       document.getElementById('tstTimeLimit').value = 0;
+      const mine = DB.students.filter(s => studentTeacherIds(s).includes(String(curUser.id)));
+      document.getElementById('tstTarget').innerHTML = `<option value="all">👥 Barcha o'quvchilarim</option>` +
+        [...new Set(mine.flatMap(s => [s.group || 'D1', ...(s.extraGroups || [])]))].sort().map(g => `<option value="g:${escHtml(g)}">Guruh: ${escHtml(g)}</option>`).join('') +
+        mine.map(s => `<option value="s:${s.id}">O'quvchi: ${escHtml(s.name)} (${escHtml(s.group || '')})</option>`).join('');
       document.getElementById('tstQList').innerHTML = '';
       tstQCount = 0;
       addTstQ(); addTstQ();
@@ -10797,7 +10874,10 @@
       });
       if (!questions.length) { showToast('❗ Kamida 1 ta to\'liq savol kiriting'); return; }
       DB.tests = DB.tests || [];
+      const tgt = (document.getElementById('tstTarget') || {}).value || 'all';
       DB.tests.push({
+        targetType: tgt === 'all' ? 'all' : tgt.startsWith('g:') ? 'group' : 'student',
+        targetGroup: tgt.startsWith('g:') ? tgt.slice(2) : '', targetStudentId: tgt.startsWith('s:') ? Number(tgt.slice(2)) : null,
         id: 'test' + Date.now(), title, coinPer, timeLimit, questions,
         teacherId: curUser.id, teacherName: curUser.name, createdAt: Date.now(), active: true
       });
@@ -10850,7 +10930,7 @@
     function renderStudentTests() {
       const el = document.getElementById('availableTests'); if (!el) return;
       const myTeacherIds = studentTeacherIds(curUser);
-      const tests = (DB.tests || []).filter(t => t.active && myTeacherIds.includes(String(t.teacherId)));
+      const tests = (DB.tests || []).filter(t => t.active && myTeacherIds.includes(String(t.teacherId)) && (!t.targetType || hwIsForStudent(t, curUser)));
       if (!tests.length) {
         el.innerHTML = `<div class="card"><div class="cb" style="color:var(--text3);font-size:13px;text-align:center;padding:30px;font-family:'JetBrains Mono',monospace;">// Test mavjud emas</div></div>`;
         return;
@@ -14110,5 +14190,6 @@ echo "Salom, Dunyo!";
       window.visualViewport.addEventListener('scroll', apply);
     }
   </script>
+  <script src="finance-ui.js"></script>
 </body>
 </html>
