@@ -379,3 +379,88 @@ def test_manager_and_director_roles(client):
     assert client.post("/api/finance/payments", headers=manager, json={"student_id": 1001, "amount": 1, "method": "cash", "idempotency_key": key()}).status_code == 403
     assert client.get("/api/finance/summary", headers=director).status_code == 200
     assert client.get("/api/finance/audit", headers=director).status_code == 200
+
+
+# ---------------------------------------------------------------- chegirma, qayta to'lov, qabul, AI
+def test_discount_and_period_payment_block(client):
+    admin = login(client, "+998900000002", "admin")
+    month = __import__("finance")._this_month()
+    fee = {"student_id": 1001, "monthly_fee": 500000, "effective_from": month, "discount_pct": 20}
+    assert client.post("/api/finance/fees", headers=admin, json=fee).status_code == 400   # sababsiz chegirma
+    assert client.post("/api/finance/fees", headers=admin, json={**fee, "discount_reason": "Aka-uka"}).status_code == 201
+    pay = lambda amount, sid=1001: client.post("/api/finance/payments", headers=admin, json={
+        "student_id": sid, "amount": amount, "method": "cash", "period": month, "idempotency_key": key()})
+    assert pay(500000).status_code == 409          # chegirmadan keyin oylik 400 000 — ortiqcha
+    assert pay(300000).status_code == 201
+    assert pay(150000).status_code == 409          # qolgani 100 000
+    assert pay(100000).status_code == 201
+    assert pay(1000).status_code == 409            # oy to'liq to'langan — qayta to'lov yo'q
+    debt = client.get("/api/finance/fees", headers=admin).get_json()["items"]
+    row = next(r for r in debt if r["student_id"] == 1001)
+    assert row["monthly_fee"] == 400000 and row["discount_pct"] == 20 and row["discount_reason"] == "Aka-uka" and row["debt"] == 0
+    # tarifsiz o'quvchi: shu oy uchun aynan shu summani ikki marta to'lab bo'lmaydi
+    assert pay(70000, 1002).status_code == 201 and pay(70000, 1002).status_code == 409
+
+
+def test_salary_per_paying_student(client):
+    admin = login(client, "+998900000002", "admin")
+    assert client.post("/api/school/salary/rules", headers=admin, json={"teacher_id": 2001, "type": "per_student", "value": 150000}).status_code == 201
+    for amount in (200000, 300000):  # bitta o'quvchi ikki marta — bitta o'quvchi hisoblanadi
+        client.post("/api/finance/payments", headers=admin, json={"student_id": 1001, "amount": amount, "method": "cash", "idempotency_key": key()})
+    row = next(r for r in client.get("/api/school/salary", headers=admin).get_json()["items"] if r["teacher_id"] == 2001)
+    assert row["paid_students"] == 1 and row["amount"] == 150000
+
+
+def test_teacher_sees_own_students_with_phone_and_debt(client):
+    admin = login(client, "+998900000002", "admin")
+    client.post("/api/finance/fees", headers=admin, json={"student_id": 1001, "monthly_fee": 300000})
+    teacher = login(client, "+998900000001", "teach")
+    out = client.get("/api/school/students", headers=teacher).get_json()
+    assert [i["id"] for i in out["items"]] == [1001]
+    assert out["items"][0]["phone"] == "+998901112233" and out["items"][0]["debt"] == 300000 and out["debtors"] == 1
+    assert client.get("/api/school/students?q=yo'q", headers=teacher).get_json()["items"] == []
+    assert len(client.get("/api/school/students", headers=admin).get_json()["items"]) == 2
+    assert [s["id"] for s in client.get("/api/crm/students?debtors=1", headers=admin).get_json()["items"]] == [1001]
+    sheet = client.get("/api/school/attendance/sheet?group=D1", headers=teacher).get_json()["items"][0]
+    assert sheet["phone"] == "+998901112233" and sheet["debt"] == 300000
+
+
+def test_leads_by_subject(client):
+    manager = login(client, "+998900000005", "mgr")
+    lead = {"name": "Yangi Bola", "phone": "+998 90 123 45 67", "subject": "Python"}
+    res = client.post("/api/crm/leads", headers=manager, json=lead)
+    assert res.status_code == 201
+    assert client.post("/api/crm/leads", headers=manager, json=lead).status_code == 409
+    client.post("/api/crm/leads", headers=manager, json={**lead, "phone": "+998901234500"})
+    client.post("/api/crm/leads", headers=manager, json={**lead, "phone": "+998901234501", "subject": "Ingliz tili"})
+    out = client.get("/api/crm/leads", headers=manager).get_json()
+    assert {x["subject"]: x["waiting"] for x in out["subjects"]} == {"Python": 2, "Ingliz tili": 1}
+    lid = res.get_json()["lead"]["id"]
+    assert client.post(f"/api/crm/leads/{lid}/status", headers=manager, json={"status": "enrolled"}).status_code == 400
+    assert client.post(f"/api/crm/leads/{lid}/status", headers=manager, json={"status": "enrolled", "student_id": 1001}).status_code == 200
+    assert len(client.get("/api/crm/leads?subject=Python", headers=manager).get_json()["items"]) == 1
+    assert client.get("/api/crm/leads", headers=login(client, "+998900000001", "teach")).status_code == 403
+
+
+def test_ai_assistant_uses_aggregates_only(client, monkeypatch):
+    admin = login(client, "+998900000002", "admin")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    assert client.post("/api/school/ai", headers=admin, json={"question": "Nechta qarzdor bor?"}).status_code == 503
+    sent = {}
+
+    class Fake:
+        def __init__(self, body): self.body = body
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b'{"choices":[{"message":{"content":"2 ta qarzdor"}}]}'
+
+    def fake_urlopen(req, timeout=0):
+        sent["body"] = req.data.decode("utf-8")
+        return Fake(req.data)
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setattr(sys.modules["school"].urllib.request, "urlopen", fake_urlopen)
+    out = client.post("/api/school/ai", headers=admin, json={"question": "Nechta qarzdor bor?"})
+    assert out.status_code == 200 and out.get_json()["answer"] == "2 ta qarzdor"
+    assert "qarzdorlar_soni" in sent["body"] and "Ali Valiyev" not in sent["body"] and "+998901112233" not in sent["body"]
+    assert client.post("/api/school/ai", headers=login(client, "+998900000001", "teach"), json={"question": "x"}).status_code == 403

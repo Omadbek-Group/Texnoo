@@ -55,7 +55,6 @@
   function finRender() {
     const pg = document.getElementById('finpg'); if (!pg) return;
     const tabs = [['dash', 'Dashboard'], ['pay', "To'lovlar"], ['exp', 'Xarajatlar'], ['debt', 'Qarzdorlar'], ['fees', 'Oylik tariflar']];
-    if (isFullAdmin()) tabs.push(['audit', 'Audit log']);
     pg.innerHTML = `
       <div class="ph"><h2>MOLIYA VA KASSA</h2><p>// To'lovlar, xarajatlar, qarzdorlik va kassa — real yozuvlardan</p></div>
       <div class="card" style="margin-bottom:12px;"><div class="cb" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
@@ -327,7 +326,7 @@
           <td><strong>${esc(d.student_name)}</strong></td><td>${esc(d.group_name)}</td><td style="font-size:11px;">${esc(d.phone)}</td>
           <td>${fmt(d.monthly_fee)}</td><td>${fmt(d.charged)}</td><td>${fmt(d.paid)}</td>
           <td style="color:var(--red);font-weight:700;white-space:nowrap;">${fmt(d.debt)}</td><td>${d.months_owed ?? '—'}</td>
-          <td><button class="btn btn-xs btn-success" onclick="finOpenPayment(${d.student_id}, ${d.debt})"><i class="fas fa-cash-register"></i></button></td>
+          <td><button class="btn btn-xs btn-success" onclick="finOpenPayment(${d.student_id}, ${Math.min(Math.max(0, d.debt), d.monthly_fee || Math.max(0, d.debt)) || ''})"><i class="fas fa-cash-register"></i></button></td>
         </tr>`).join('') || `<tr><td colspan="9">${box('// Qarzdor yo\'q 🎉')}</td></tr>`}</tbody>
       </table></div></div>
       <div style="font-size:10px;color:var(--text3);padding:10px 14px;font-family:'JetBrains Mono',monospace;">// Qarz = oylik tariflar (tarif boshlangan oydan shu oygacha) − bekor qilinmagan to'lovlar</div></div>`;
@@ -350,10 +349,10 @@
     const rows = (window.__finFees || []).filter(r => !needle || (r.student_name + ' ' + r.group_name).toLowerCase().includes(needle));
     el.innerHTML = rows.map(r => `<tr>
       <td><strong>${esc(r.student_name)}</strong></td><td>${esc(r.group_name)}</td>
-      <td>${r.monthly_fee ? fmt(r.monthly_fee) : '<span style="color:var(--text3)">belgilanmagan</span>'}</td><td>${fmt(r.paid)}</td>
+      <td>${r.monthly_fee || r.base_fee ? fmt(r.monthly_fee) : '<span style="color:var(--text3)">belgilanmagan</span>'}${r.discount_pct ? `<br><span class="badge bg" title="${esc(r.discount_reason)}">-${r.discount_pct}% · ${esc(r.discount_reason)}</span>` : ''}</td><td>${fmt(r.paid)}</td>
       <td style="font-weight:700;color:${r.debt > 0 ? 'var(--red)' : 'var(--green)'};">${r.debt > 0 ? fmt(r.debt) : r.debt < 0 ? 'avans ' + fmt(-r.debt) : '0'}</td>
       <td style="white-space:nowrap;">${isFullAdmin() ? `<button class="btn btn-xs btn-cyan" onclick="finOpenFee(${r.student_id})"><i class="fas fa-pen"></i> Tarif</button>` : ''}
-        <button class="btn btn-xs btn-success" onclick="finOpenPayment(${r.student_id}, ${Math.max(0, r.debt) || ''})"><i class="fas fa-cash-register"></i></button></td>
+        <button class="btn btn-xs btn-success" onclick="finOpenPayment(${r.student_id}, ${Math.min(Math.max(0, r.debt), r.monthly_fee || Math.max(0, r.debt)) || ''})"><i class="fas fa-cash-register"></i></button></td>
     </tr>`).join('') || `<tr><td colspan="6">${box("// O'quvchi topilmadi")}</td></tr>`;
   }
   async function finOpenFee(studentId) {
@@ -363,11 +362,15 @@
     openGlobalModal(`
       <div class="modal-title"><i class="fas fa-tags"></i> Oylik tarif: ${esc(row.student_name)}</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <div class="form-group" style="flex:1;min-width:150px;">${label("OYLIK SUMMA (SO'M)")}<input class="form-control" id="ffFee" inputmode="numeric" value="${row.monthly_fee || ''}"></div>
+        <div class="form-group" style="flex:1;min-width:150px;">${label("OYLIK SUMMA (SO'M)")}<input class="form-control" id="ffFee" inputmode="numeric" value="${row.base_fee || ''}"></div>
         <div class="form-group" style="flex:1;min-width:140px;">${label('QAYSI OYDAN')}<input type="month" class="form-control" id="ffFrom" value="${thisMonth()}"></div>
       </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div class="form-group" style="flex:0 0 110px;">${label('CHEGIRMA %')}<input class="form-control" id="ffDisc" inputmode="numeric" value="${row.discount_pct || 0}"></div>
+        <div class="form-group" style="flex:1;min-width:160px;">${label('CHEGIRMA SABABI')}<input class="form-control" id="ffReason" maxlength="300" value="${esc(row.discount_reason || '')}" placeholder="Masalan: aka-uka, a'lochi, ijtimoiy"></div>
+      </div>
       <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">0 kiritilsa — shu oydan boshlab hisoblash to'xtaydi (masalan, o'quvchi ketganda). Eski tariflar tarixda qoladi.</div>
-      ${history.length ? `<div style="font-size:11px;margin-bottom:10px;max-height:120px;overflow:auto;">${history.map(h => `<div class="fin-line"><span>${esc(h.effective_from)} dan</span><span>${fmt(h.monthly_fee)} · ${esc(h.created_by_name)}</span></div>`).join('')}</div>` : ''}
+      ${history.length ? `<div style="font-size:11px;margin-bottom:10px;max-height:120px;overflow:auto;">${history.map(h => `<div class="fin-line"><span>${esc(h.effective_from)} dan</span><span>${fmt(h.monthly_fee)}${h.discount_pct ? ` −${h.discount_pct}% (${esc(h.discount_reason)})` : ''} · ${esc(h.created_by_name)}</span></div>`).join('')}</div>` : ''}
       <div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="closeGlobalModal()">Bekor</button>
         <button class="btn btn-cyan" style="flex:1;" onclick="finSubmitFee(${studentId})"><i class="fas fa-check"></i> Saqlash</button></div>`);
   }
@@ -375,7 +378,8 @@
     const fee = digits(document.getElementById('ffFee').value);
     if (fee === '') { showToast('❗ Summani kiriting'); return; }
     try {
-      await api('/fees', { method: 'POST', body: JSON.stringify({ student_id: studentId, monthly_fee: Number(fee), effective_from: document.getElementById('ffFrom').value }) });
+      await api('/fees', { method: 'POST', body: JSON.stringify({ student_id: studentId, monthly_fee: Number(fee), effective_from: document.getElementById('ffFrom').value,
+        discount_pct: Number(digits(document.getElementById('ffDisc').value) || 0), discount_reason: document.getElementById('ffReason').value.trim() }) });
       closeGlobalModal(); showToast('✅ Tarif saqlandi'); finLoadTab();
     } catch (e) { showToast('❌ ' + e.message); }
   }
@@ -441,7 +445,7 @@
   }
 
   // Kassir/menejer faqat o'z bo'limlarini ko'radi (server ham shunday cheklaydi). '' = hammasi ko'rinadi.
-  const ROLE_PAGES = { cashier: /finpg|tapg|settpg|doLogout/, manager: /crmpg|schedpg|attpg|tapg|settpg|doLogout/ };
+  const ROLE_PAGES = { cashier: /finpg|tapg|settpg|doLogout/, manager: /crmpg|schedpg|attpg|aicenterpg|tapg|settpg|doLogout/ };
   function finApplyRoleNav(level) {
     const keep = ROLE_PAGES[level];
     document.querySelectorAll('#aNav .nav-item').forEach(el => {
@@ -456,17 +460,18 @@
   const STATUS = { active: ['Faol', 'gr'], frozen: ['Muzlatilgan', 'bb'], graduated: ['Bitirgan', 'bg'], left: ['Ketgan', 'rr'] };
   const statusTag = (s) => `<span class="badge ${(STATUS[s] || STATUS.active)[1]}">${(STATUS[s] || STATUS.active)[0].toUpperCase()}</span>`;
   const EVENT = { enrolled: 'Qabul qilindi', group_changed: "Guruh o'zgardi", status_changed: "Holat o'zgardi" };
-  const crm = { status: 'active', group: '', q: '', page: 1, groups: [] };
+  const crm = { status: 'active', group: '', q: '', page: 1, groups: [], debtors: false };
 
   async function crmRender() {
     const pg = document.getElementById('crmpg'); if (!pg) return;
-    const tabs = [['active', 'Faol'], ['frozen', 'Muzlatilgan'], ['graduated', 'Bitiruvchilar arxivi'], ['left', 'Ketganlar'], ['all', 'Hammasi']];
+    const tabs = [['leads', 'Qabul (yangi kelganlar)'], ['active', 'Faol'], ['frozen', 'Muzlatilgan'], ['graduated', 'Bitiruvchilar arxivi'], ['left', 'Ketganlar'], ['all', 'Hammasi']];
     pg.innerHTML = `
       <div class="ph"><h2>O'QUVCHILAR (CRM)</h2><p>// Qabul, guruh, muzlatish, arxiv va o'quvchi tarixi</p></div>
       <div id="crmSummary" class="fin-grid">${loading()}</div>
       <div class="card" style="margin-bottom:12px;"><div class="cb" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
         <input class="form-control" style="width:200px;" placeholder="Ism, telefon yoki guruh" value="${esc(crm.q)}" onkeydown="if(event.key==='Enter'){crmSet('q',this.value)}">
         <select class="form-control" style="width:140px;" id="crmGroupSel" onchange="crmSet('group',this.value)"><option value="">Barcha guruhlar</option></select>
+        <label style="font-size:12px;display:flex;align-items:center;gap:6px;"><input type="checkbox" ${crm.debtors ? 'checked' : ''} onchange="crmSet('debtors',this.checked)"> Faqat qarzdorlar</label>
         <span style="flex:1"></span>
         ${canManage() ? `<button class="btn btn-success btn-sm" onclick="crmOpenCreate()"><i class="fas fa-user-plus"></i> Yangi o'quvchi</button>` : ''}
       </div></div>
@@ -490,16 +495,17 @@
 
   async function crmLoad() {
     const body = document.getElementById('crmBody'); if (!body) return;
+    if (crm.status === 'leads') return leadsLoad(body);
     body.innerHTML = loading();
     try {
-      const out = await crmApi('/students?' + qs({ status: crm.status, group: crm.group, q: crm.q, page: crm.page, page_size: 25 }));
+      const out = await crmApi('/students?' + qs({ status: crm.status, group: crm.group, q: crm.q, page: crm.page, page_size: 25, debtors: crm.debtors ? 1 : '' }));
       const admin = canManage();
       body.innerHTML = `<div class="card"><div class="cb" style="padding:0;"><div class="tw"><table>
-        <thead><tr><th>O'quvchi</th><th>Telefon</th><th>Guruh</th><th>Holat</th><th>Oylik</th><th>Qarz</th><th></th></tr></thead>
+        <thead><tr><th>O'quvchi</th><th>Telefon</th><th>Guruh</th><th>Holat</th><th>Qabul</th><th>Oylik</th><th>Qarz</th><th></th></tr></thead>
         <tbody>${out.items.map(s => `<tr>
           <td><strong>${esc(s.name)}</strong><br><span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;">ID:${s.id}</span></td>
           <td style="font-size:11px;">${esc(s.phone)}${s.parentPhone ? `<br><span style="color:var(--text3);">ota-ona: ${esc(s.parentPhone)}</span>` : ''}</td>
-          <td>${esc(s.group)}</td><td>${statusTag(s.status)}</td>
+          <td>${esc(s.group)}</td><td>${statusTag(s.status)}</td><td style="font-size:11px;white-space:nowrap;">${esc(s.enrolled_at || '—')}</td>
           <td>${s.monthly_fee ? fmt(s.monthly_fee) : '—'}</td>
           <td style="font-weight:700;color:${s.debt > 0 ? 'var(--red)' : 'var(--text2)'};white-space:nowrap;">${s.debt > 0 ? fmt(s.debt) : '—'}</td>
           <td style="white-space:nowrap;">
@@ -576,6 +582,7 @@
     const btn = document.getElementById('ccSubmit'); btn.disabled = true;
     try {
       const out = await crmApi('/students', { method: 'POST', body: JSON.stringify(body) });
+      if (window.__enrollLead) { await leadStatus(window.__enrollLead, 'enrolled', out.student.id); window.__enrollLead = null; }
       openGlobalModal(`<div class="modal-title"><i class="fas fa-check"></i> O'quvchi qo'shildi</div>
         <p style="margin:10px 0;">${esc(out.student.name)} · ${esc(out.student.group)}</p>
         ${out.password ? `<p style="margin-bottom:14px;">Kirish: <code>${esc(out.student.phone)}</code><br>Parol: <code style="font-size:16px;">${esc(out.password)}</code><br><span style="font-size:11px;color:var(--text3);">Parol faqat hozir ko'rsatiladi — o'quvchiga yetkazing.</span></p>` : ''}
@@ -599,13 +606,17 @@
       };
       openGlobalModal(`<div class="modal-title"><i class="fas fa-clock-rotate-left"></i> ${esc(s.name)}</div>
         <div style="font-size:12px;margin-bottom:10px;">${statusTag(s.status)} · ${esc(s.group)} · ${esc(s.phone)}<br>
-          Oylik: ${s.monthly_fee ? fmt(s.monthly_fee) : '—'} · To'langan: ${fmt(s.paid)} · <strong style="color:${s.debt > 0 ? 'var(--red)' : 'var(--green)'}">${s.debt > 0 ? 'Qarz ' + fmt(s.debt) : s.debt < 0 ? 'Avans ' + fmt(-s.debt) : "Qarz yo'q"}</strong></div>
+          Oylik: ${s.monthly_fee ? fmt(s.monthly_fee) : '—'}${s.discount_pct ? ` (chegirma ${s.discount_pct}%: ${esc(s.discount_reason)})` : ''} · To'langan: ${fmt(s.paid)} · <strong style="color:${s.debt > 0 ? 'var(--red)' : 'var(--green)'}">${s.debt > 0 ? 'Qarz ' + fmt(s.debt) : s.debt < 0 ? 'Avans ' + fmt(-s.debt) : "Qarz yo'q"}</strong></div>
         <div style="max-height:50vh;overflow:auto;">
           <h4 style="font-size:12px;margin:8px 0;">TARIX</h4>${out.events.map(evLine).join('') || `<div style="color:var(--text3);font-size:12px;">// Hodisa yo'q (CRM'dan oldin qo'shilgan)</div>`}
           <h4 style="font-size:12px;margin:12px 0 8px;">TO'LOVLAR</h4>${out.payments.map(p => `<div class="fin-line"><span>${esc(p.day)} · ${esc(p.receipt_no)} · ${esc(p.period || '')}</span><span>${fmt(p.amount)} ${p.status === 'void' ? statusBadge('void') : ''}</span></div>`).join('') || `<div style="color:var(--text3);font-size:12px;">// To'lov yo'q</div>`}
           <h4 style="font-size:12px;margin:12px 0 8px;">TARIFLAR</h4>${out.fees.map(f => `<div class="fin-line"><span>${esc(f.effective_from)} dan</span><span>${fmt(f.monthly_fee)}</span></div>`).join('') || `<div style="color:var(--text3);font-size:12px;">// Tarif belgilanmagan</div>`}
         </div>
-        <button class="btn" style="width:100%;margin-top:12px;" onclick="closeGlobalModal()">Yopish</button>`);
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+          ${isFullAdmin() ? `<button class="btn btn-success" style="flex:1;" onclick="finOpenPayment(${s.id}, ${Math.min(Math.max(0, s.debt), s.monthly_fee || Math.max(0, s.debt)) || ''})"><i class="fas fa-cash-register"></i> To'lov qabul qilish</button>` : ''}
+          <button class="btn btn-gold" style="flex:1;" onclick="crmCertificate(${s.id})"><i class="fas fa-certificate"></i> Sertifikat</button>
+          <button class="btn" style="flex:1;" onclick="closeGlobalModal()">Yopish</button></div>`);
+      window.__crmProfile = out;
     } catch (e) { showToast('❌ ' + e.message); }
   }
 
@@ -713,7 +724,8 @@
   }
   function attDrawRows() {
     const body = document.getElementById('attRows'); if (!body) return;
-    body.innerHTML = (att.sheet || []).map(s => `<tr><td><strong>${esc(s.name)}</strong>${s.status === 'frozen' ? ' <span class="badge bb">MUZLATILGAN</span>' : ''}</td>
+    body.innerHTML = (att.sheet || []).map(s => `<tr><td><strong>${esc(s.name)}</strong>${s.status === 'frozen' ? ' <span class="badge bb">MUZLATILGAN</span>' : ''}${s.debt > 0 ? ` <span class="badge rr">QARZ ${fmt(s.debt)}</span>` : ''}
+      <br><span style="font-size:10px;color:var(--text3);">${esc(s.phone)}</span></td>
       <td style="white-space:nowrap;">${Object.entries(ATT).map(([k, [t, c]]) => `<button class="btn btn-xs" style="${att.marks[s.student_id] === k ? `background:${c};color:#000;border-color:${c};` : ''}"
         aria-pressed="${att.marks[s.student_id] === k}" onclick="attMark(${s.student_id},'${k}')">${t}</button>`).join(' ')}</td></tr>`).join('')
       || `<tr><td>${box("// Guruhda faol o'quvchi yo'q")}</td></tr>`;
@@ -762,7 +774,7 @@
   }
 
   const ruleText = (r) => !r ? '<span style="color:var(--text3)">belgilanmagan</span>'
-    : r.type === 'fixed' ? `Qat'iy ${fmt(r.value)}` : `${r.value / 100}% tushumdan`;
+    : r.type === 'fixed' ? `Qat'iy ${fmt(r.value)}` : r.type === 'per_student' ? `Har to'lagan o'quvchi: ${fmt(r.value)}` : `${r.value / 100}% tushumdan`;
   const sal = { month: thisMonth() };
   async function salRender() {
     const pg = document.getElementById('salpg'); if (!pg) return;
@@ -789,8 +801,8 @@
     openGlobalModal(`<div class="modal-title"><i class="fas fa-sack-dollar"></i> Oylik sharti: ${esc(r.teacher_name)}</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <div class="form-group" style="flex:1;min-width:140px;">${label('TURI')}<select class="form-control" id="srType">
-          <option value="percent" ${rule.type !== 'fixed' ? 'selected' : ''}>Foiz (tushumdan)</option><option value="fixed" ${rule.type === 'fixed' ? 'selected' : ''}>Qat'iy maosh</option></select></div>
-        <div class="form-group" style="flex:1;min-width:120px;">${label("QIYMAT (% yoki so'm)")}<input class="form-control" id="srValue" inputmode="decimal" value="${rule.type ? (rule.type === 'fixed' ? rule.value : rule.value / 100) : ''}"></div>
+          <option value="percent" ${rule.type !== 'fixed' ? 'selected' : ''}>Foiz (tushumdan)</option><option value="fixed" ${rule.type === 'fixed' ? 'selected' : ''}>Qat'iy maosh</option><option value="per_student" ${rule.type === 'per_student' ? 'selected' : ''}>Har to'lagan o'quvchi uchun</option></select></div>
+        <div class="form-group" style="flex:1;min-width:120px;">${label("QIYMAT (% yoki so'm)")}<input class="form-control" id="srValue" inputmode="decimal" value="${rule.type ? (rule.type === 'percent' ? rule.value / 100 : rule.value) : ''}"></div>
         <div class="form-group" style="flex:1;min-width:130px;">${label('QAYSI OYDAN')}<input type="month" class="form-control" id="srFrom" value="${sal.month}"></div>
       </div>
       <div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="closeGlobalModal()">Bekor</button>
@@ -815,18 +827,156 @@
       const r = (await schApi('/salary/my?' + qs({ month: sal.month }))).item;
       document.getElementById('mySalBody').innerHTML = !r ? box("// Ma'lumot yo'q") : `
         <div class="fin-grid">${stat('HISOBLANGAN OYLIK', fmt(r.amount), sal.month, 'gt')}${stat('SHART', ruleText(r.rule), '')}
-          ${stat("O'QUVCHILARIM", r.students, 'Faol + muzlatilgan')}${stat('TUSHUM', fmt(r.base), r.payments_count + " ta to'lov")}</div>
+          ${stat("O'QUVCHILARIM", r.students, r.paid_students + ' tasi shu oy to\'lagan')}${stat('TUSHUM', fmt(r.base), r.payments_count + " ta to'lov")}</div>
         ${r.rule && r.rule.type === 'percent' ? `<div class="card"><div class="ch"><h4>HISOBGA KIRGAN TO'LOVLAR</h4></div><div class="cb" style="padding:0;"><div class="tw"><table>
           <tbody>${(r.payments || []).map(x => `<tr><td>${esc(x.day)}</td><td>${esc(x.student_name)}</td><td>${fmt(x.amount)}</td></tr>`).join('') || `<tr><td>${box("// Bu oyda to'lov yo'q")}</td></tr>`}</tbody>
         </table></div></div></div>` : ''}`;
     } catch (e) { document.getElementById('mySalBody').innerHTML = errorBox(e.message, 'salRenderMy()'); }
   }
 
+  // ───────────────────────── Sertifikat (chop etish uchun) ─────────────────────────
+  function crmCertificate(id) {
+    const out = window.__crmProfile;
+    if (!out || out.student.id !== id) { showToast('❗ Profilni qayta oching'); return; }
+    const s = out.student;
+    const enrolled = (out.events.filter(e => e.type === 'enrolled').pop() || {}).effective_date || '';
+    const finished = (out.events.find(e => e.type === 'status_changed' && e.to_status === 'graduated') || {}).effective_date || today();
+    const school = (DB.settings && DB.settings.schoolName) || 'TEXNOO';
+    const no = 'CERT-' + finished.replace(/-/g, '') + '-' + s.id;
+    const w = window.open('', '_blank', 'width=1000,height=720');
+    if (!w) { showToast('❗ Brauzer yangi oynani blokladi'); return; }
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sertifikat ${esc(s.name)}</title>
+      <style>@page{size:A4 landscape;margin:0}body{margin:0;font-family:Georgia,serif;background:#fff;color:#1a1a1a}
+      .c{box-sizing:border-box;width:297mm;height:210mm;padding:22mm;border:12px double #b8860b;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+      h1{font-size:54px;letter-spacing:8px;margin:0 0 8px;color:#8a6508}.sub{font-size:18px;letter-spacing:3px;margin-bottom:28px}
+      .name{font-size:40px;font-weight:bold;border-bottom:2px solid #b8860b;padding:0 30px 6px;margin:12px 0 18px}
+      .meta{display:flex;justify-content:space-between;width:100%;margin-top:40px;font-size:14px}</style></head>
+      <body><div class="c"><div style="font-size:20px;font-weight:bold;">${esc(school)}</div><h1>SERTIFIKAT</h1>
+      <div class="sub">Ushbu sertifikat</div><div class="name">${esc(s.name)}</div>
+      <div style="font-size:18px;max-width:80%;">${esc(s.group)} guruhida ${enrolled ? esc(enrolled) + ' — ' : ''}${esc(finished)} davomida o'qiganini tasdiqlaydi.</div>
+      <div class="meta"><span>№ ${esc(no)}</span><span>Berilgan sana: ${esc(today())}</span><span>Rahbar: ____________</span></div>
+      </div><script>window.onload=()=>window.print()<\/script></body></html>`);
+    w.document.close();
+  }
+
+  // ───────────────────────── Qabul: yangi kelganlar fan bo'yicha ─────────────────────────
+  const LEAD = { new: ['Yangi', 'bb'], contacted: ["Bog'lanildi", 'bg'], waiting: ['Guruh kutmoqda', 'gr'], enrolled: ['Qabul qilindi', 'gr'], rejected: ['Rad etdi', 'rr'] };
+  const leads = { subject: '', status: 'open' };
+  async function leadsLoad(body) {
+    body = body || document.getElementById('crmBody'); if (!body) return;
+    body.innerHTML = loading();
+    try {
+      const out = await crmApi('/leads?' + qs({ subject: leads.subject, status: leads.status, q: crm.q }));
+      body.innerHTML = `
+        <div class="card" style="margin-bottom:12px;"><div class="ch"><h4>YANGI KELGAN O'QUVCHINI YOZISH</h4></div><div class="cb" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;">
+          <div>${label('ISM FAMILIYA')}<input class="form-control" id="ldName" style="width:170px;"></div>
+          <div>${label('TELEFON')}<input class="form-control" id="ldPhone" style="width:150px;" placeholder="+998901234567"></div>
+          <div>${label('FAN')}<input class="form-control" id="ldSubject" list="ldSubjects" style="width:150px;" placeholder="Python, Ingliz tili..."><datalist id="ldSubjects">${out.subjects.map(x => `<option value="${esc(x.subject)}">`).join('')}</datalist></div>
+          <div>${label('IZOH')}<input class="form-control" id="ldNote" style="width:170px;" placeholder="Vaqti, darajasi..."></div>
+          <button class="btn btn-success btn-sm" onclick="leadAdd()"><i class="fas fa-plus"></i> Yozish</button>
+        </div></div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+          <button class="btn btn-sm ${leads.subject ? '' : 'btn-cyan'}" onclick="leadsSet('subject','')">Barcha fanlar</button>
+          ${out.subjects.map(x => `<button class="btn btn-sm ${leads.subject === x.subject ? 'btn-cyan' : ''}" onclick="leadsSet('subject','${esc(x.subject).replace(/'/g, "\\'")}')">${esc(x.subject)} · ${x.waiting} kutmoqda</button>`).join('')}
+          <select class="form-control" style="width:150px;margin-left:auto;" onchange="leadsSet('status',this.value)">
+            <option value="open" ${leads.status === 'open' ? 'selected' : ''}>Kutayotganlar</option>
+            ${Object.entries(LEAD).map(([k, v]) => `<option value="${k}" ${leads.status === k ? 'selected' : ''}>${v[0]}</option>`).join('')}</select>
+        </div>
+        <div class="card"><div class="cb" style="padding:0;"><div class="tw"><table>
+          <thead><tr><th>Ism</th><th>Telefon</th><th>Fan</th><th>Izoh</th><th>Yozilgan</th><th>Holat</th><th></th></tr></thead>
+          <tbody>${out.items.map(l => `<tr><td><strong>${esc(l.name)}</strong></td><td style="font-size:11px;">${esc(l.phone)}</td><td>${esc(l.subject)}</td>
+            <td style="font-size:11px;">${esc(l.note || '')}</td><td style="font-size:11px;">${dt(l.created_at)}</td>
+            <td><span class="badge ${(LEAD[l.status] || LEAD.new)[1]}">${(LEAD[l.status] || LEAD.new)[0]}</span></td>
+            <td style="white-space:nowrap;">${['new', 'contacted', 'waiting'].includes(l.status) ? `
+              <select class="form-control" style="width:120px;display:inline-block;" onchange="leadStatus('${esc(l.id)}',this.value)"><option value="">Holat...</option>
+                <option value="contacted">Bog'lanildi</option><option value="waiting">Guruh kutmoqda</option><option value="rejected">Rad etdi</option></select>
+              <button class="btn btn-xs btn-success" title="Guruhga qabul qilish" onclick="leadEnroll('${esc(l.id)}')"><i class="fas fa-user-plus"></i> Qabul</button>` : ''}</td>
+          </tr>`).join('') || `<tr><td colspan="7">${box("// Ro'yxat bo'sh")}</td></tr>`}</tbody></table></div></div></div>`;
+      window.__leads = out.items;
+    } catch (e) { body.innerHTML = errorBox(e.message, 'leadsLoad()'); }
+  }
+  function leadsSet(k, v) { leads[k] = v; leadsLoad(); }
+  async function leadAdd() {
+    const v = (id) => document.getElementById(id).value.trim();
+    try {
+      await crmApi('/leads', { method: 'POST', body: JSON.stringify({ name: v('ldName'), phone: v('ldPhone'), subject: v('ldSubject'), note: v('ldNote') }) });
+      showToast("✅ Yozildi"); leadsLoad();
+    } catch (e) { showToast('❌ ' + e.message); }
+  }
+  async function leadStatus(id, status, studentId) {
+    if (!status) return;
+    try { await crmApi(`/leads/${encodeURIComponent(id)}/status`, { method: 'POST', body: JSON.stringify({ status, student_id: studentId }) }); leadsLoad(); }
+    catch (e) { showToast('❌ ' + e.message); }
+  }
+  // Qabul: o'quvchi qo'shish oynasi lead ma'lumotlari bilan to'ldiriladi, saqlangach lead "qabul qilindi" bo'ladi.
+  function leadEnroll(id) {
+    const l = (window.__leads || []).find(x => x.id === id); if (!l) return;
+    crmOpenCreate();
+    const [first, ...rest] = l.name.split(' ');
+    document.getElementById('ccFirst').value = first || '';
+    document.getElementById('ccLast').value = rest.join(' ');
+    document.getElementById('ccPhone').value = l.phone;
+    window.__enrollLead = id;
+  }
+
+  // ───────────────────────── O'qituvchi: o'quvchilarim ─────────────────────────
+  const stud = { q: '', debtors: false };
+  async function studRender() {
+    const pg = document.getElementById('mystudpg'); if (!pg) return;
+    pg.innerHTML = `<div class="ph"><h2>O'QUVCHILARIM</h2><p>// Telefon, qarz va shu oy davomati</p></div>
+      <div class="card" style="margin-bottom:12px;"><div class="cb" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+        <input class="form-control" style="width:240px;" placeholder="Ism, telefon yoki guruh bo'yicha qidirish" value="${esc(stud.q)}" oninput="studSet('q',this.value)">
+        <label style="font-size:12px;display:flex;align-items:center;gap:6px;"><input type="checkbox" ${stud.debtors ? 'checked' : ''} onchange="studSet('debtors',this.checked)"> Faqat qarzdorlar</label>
+        <span id="studCount" style="font-size:12px;color:var(--text3);"></span>
+      </div></div><div id="studBody">${loading()}</div>`;
+    studLoad();
+  }
+  let studTimer = null;
+  function studSet(k, v) { stud[k] = v; clearTimeout(studTimer); studTimer = setTimeout(studLoad, 250); }
+  async function studLoad() {
+    const el = document.getElementById('studBody'); if (!el) return;
+    try {
+      const out = await schApi('/students?' + qs({ q: stud.q, debtors: stud.debtors ? 1 : '' }));
+      document.getElementById('studCount').textContent = `${out.items.length} ta o'quvchi · ${out.debtors} ta qarzdor`;
+      el.innerHTML = `<div class="card"><div class="cb" style="padding:0;"><div class="tw"><table>
+        <thead><tr><th>O'quvchi</th><th>Telefon</th><th>Ota-ona</th><th>Guruh</th><th>Davomat</th><th>Oylik</th><th>Qarz</th></tr></thead>
+        <tbody>${out.items.map(s => `<tr style="${s.debt > 0 ? 'background:var(--red-dim);' : ''}"><td><strong>${esc(s.name)}</strong>${s.status === 'frozen' ? ' <span class="badge bb">MUZLATILGAN</span>' : ''}</td>
+          <td style="font-size:11px;"><a href="tel:${esc(s.phone)}" style="color:inherit;">${esc(s.phone)}</a></td><td style="font-size:11px;">${esc(s.parentPhone || '—')}</td>
+          <td>${esc(s.group)}</td><td>${rate(s.attendance)}</td><td>${s.monthly_fee ? fmt(s.monthly_fee) : '—'}</td>
+          <td style="font-weight:700;color:${s.debt > 0 ? 'var(--red)' : 'var(--green)'};white-space:nowrap;">${s.debt > 0 ? fmt(s.debt) : "yo'q"}</td></tr>`).join('')
+          || `<tr><td colspan="7">${box("// O'quvchi topilmadi")}</td></tr>`}</tbody></table></div></div></div>`;
+    } catch (e) { el.innerHTML = errorBox(e.message, 'studRender()'); }
+  }
+
+  // ───────────────────────── AI yordamchi (admin / menejer) ─────────────────────────
+  const AI_QUICK = ['Bugun nechta dars va davomat qanday?', 'Nechta qarzdor bor va jami qarz qancha?', "Qaysi fanga eng ko'p o'quvchi kutmoqda?",
+    "Yangi o'quvchini qanday qo'shaman?", "Chegirmani qanday qo'yaman?", "O'qituvchi oyligi qanday hisoblanadi?"];
+  function aiRender() {
+    const pg = document.getElementById('aicenterpg'); if (!pg) return;
+    pg.innerHTML = `<div class="ph"><h2>AI YORDAMCHI</h2><p>// Markaz holati bo'yicha savol bering yoki tizimdan foydalanishni so'rang</p></div>
+      <div class="card"><div class="cb">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">${AI_QUICK.map(q => `<button class="btn btn-sm" onclick="aiAsk(this.textContent)">${esc(q)}</button>`).join('')}</div>
+        <div style="display:flex;gap:8px;"><input class="form-control" id="aiQ" placeholder="Savolingizni yozing..." onkeydown="if(event.key==='Enter'){aiAsk(this.value)}">
+          <button class="btn btn-cyan" onclick="aiAsk(document.getElementById('aiQ').value)"><i class="fas fa-paper-plane"></i></button></div>
+        <div id="aiAnswer" style="margin-top:14px;white-space:pre-wrap;font-size:13px;line-height:1.6;"></div>
+        <div style="font-size:10px;color:var(--text3);margin-top:10px;font-family:'JetBrains Mono',monospace;">// AI'ga faqat umumiy raqamlar yuboriladi — ism va telefonlar yuborilmaydi</div>
+      </div></div>`;
+  }
+  async function aiAsk(question) {
+    question = String(question || '').trim(); if (!question) return;
+    const el = document.getElementById('aiAnswer');
+    el.innerHTML = `<div style="color:var(--text3);margin-bottom:6px;">❓ ${esc(question)}</div>` + loading();
+    try {
+      const out = await schApi('/ai', { method: 'POST', body: JSON.stringify({ question }) });
+      el.innerHTML = `<div style="color:var(--text3);margin-bottom:6px;">❓ ${esc(question)}</div>${esc(out.answer)}`;
+    } catch (e) { el.innerHTML = `<div style="color:var(--red);">❌ ${esc(e.message)}</div>`; }
+  }
+
   const css = document.createElement('style');
   css.textContent = `
     .fin-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; margin-bottom:14px; }
     .fin-line { display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid var(--bor2); font-size:12px; }
-    #finpg table td, #finpg table th, #myfinpg table td, #myfinpg table th, #crmpg table td, #crmpg table th, #schedpg td, #attpg td, #attpg th, #salpg td, #salpg th, #myattpg td { padding:8px 10px; }
+    #finpg table td, #finpg table th, #myfinpg table td, #myfinpg table th, #crmpg table td, #crmpg table th, #schedpg td, #attpg td, #attpg th, #salpg td, #salpg th, #myattpg td, #mystudpg td, #mystudpg th { padding:8px 10px; }
     @media (max-width:600px) { #finpg .tab-btn, #crmpg .tab-btn { flex:1 1 30%; } }`;
   document.head.appendChild(css);
 
@@ -836,6 +986,7 @@
     finFeeSearch, finOpenFee, finSubmitFee, finAuditPage, finExport, finApplyRoleNav,
     crmRender, crmSet, crmPage, crmLoad, crmOpenAction, crmSubmitAction, crmOpenCreate, crmSubmitCreate, crmHistory,
     schRender, schAdd, schRemove, attRender, attPick, attSetMonth, attLoadSheet, attMark, attAll, attSave, attRenderMy,
-    salRender, salSetMonth, salOpenRule, salSaveRule, salRenderMy
+    salRender, salSetMonth, salOpenRule, salSaveRule, salRenderMy,
+    crmCertificate, leadsLoad, leadsSet, leadAdd, leadStatus, leadEnroll, studRender, studSet, aiRender, aiAsk
   });
 })();

@@ -9,7 +9,11 @@ Huquqlar:
 
 from __future__ import annotations
 
+import json
+import os
 import re
+import urllib.error
+import urllib.request
 import uuid
 from datetime import date
 from typing import Any, Optional
@@ -18,7 +22,7 @@ from flask import Blueprint, g, jsonify, request
 
 from crm import ARCHIVED, _dataset, student_status
 from finance import (
-    _DAY_RE, _YM_RE, MAX_AMOUNT, _all, _audit, _body, _db, _err, _now_ms, _one, _parent_child_ids,
+    _DAY_RE, _YM_RE, MAX_AMOUNT, _all, _audit, _balances, _body, _db, _err, _now_ms, _one, _parent_child_ids,
     _student_name, _text, _this_month, _today, _x, init_finance_db,
 )
 from security import is_full_admin, require_auth
@@ -240,10 +244,13 @@ def attendance_sheet():
         lessons = _all(conn, """SELECT subject, start_time, end_time, room FROM sched_lessons
             WHERE center_id = ? AND group_name = ? AND weekday = ? AND status = 'active' ORDER BY start_time""",
                        (p["center"], group, date.fromisoformat(day).isoweekday()))
+        students = _group_students(data, p["center"], group)
+        balances = _balances(conn, p["center"], [int(s["id"]) for s in students])
     items = [{
-        "student_id": int(s["id"]), "name": _student_name(s), "status": student_status(s),
+        "student_id": int(s["id"]), "name": _student_name(s), "status": student_status(s), "phone": s.get("phone") or "",
+        "debt": balances[int(s["id"])]["debt"],
         "mark": (marks.get(int(s["id"])) or {}).get("status"), "note": (marks.get(int(s["id"])) or {}).get("note") or "",
-    } for s in _group_students(data, p["center"], group)]
+    } for s in students]
     return jsonify({"ok": True, "group": group, "date": day, "items": items, "lessons": lessons,
                     "marked_by": next((m["marked_by_name"] for m in marks.values()), None)})
 
@@ -348,6 +355,38 @@ def attendance_today():
     return jsonify({"ok": True, "date": today.isoformat(), "items": items, "summary": _stats(marks)})
 
 
+@bp.get("/students")
+@require_auth("admin", "manager", "teacher")
+def students_list():
+    """O'qituvchi o'z o'quvchilarini, xodimlar hammasini ko'radi: telefon, qarz, shu oy davomati."""
+    p = g.principal
+    data = _data()
+    q = _text(request.args.get("q"), 80).lower()
+    with _db() as conn:
+        allowed = _allowed_groups(conn, data, p)
+        rows = [s for s in _center_students(data, p["center"]) if student_status(s) not in ARCHIVED
+                and (allowed is None or str(s.get("group") or "") in allowed or p["id"] in _teacher_ids_of(s))]
+        if q:
+            rows = [s for s in rows if q in f"{_student_name(s)} {s.get('phone') or ''} {s.get('parentPhone') or ''} {s.get('group') or ''}".lower()]
+        ids = [int(s["id"]) for s in rows]
+        balances = _balances(conn, p["center"], ids)
+        month = _this_month()
+        att = _all(conn, """SELECT student_id, status FROM att_records WHERE center_id = ? AND lesson_date >= ? AND lesson_date <= ?""",
+                   (p["center"], month + "-01", month + "-31"))
+    by_student: dict[int, list[dict[str, Any]]] = {}
+    for r in att:
+        by_student.setdefault(int(r["student_id"]), []).append(r)
+    items = [{
+        "id": int(s["id"]), "name": _student_name(s), "phone": s.get("phone") or "", "parentPhone": s.get("parentPhone") or "",
+        "group": s.get("group") or "", "status": student_status(s), "attendance": _stats(by_student.get(int(s["id"]), []))["rate"],
+        **balances[int(s["id"])],
+    } for s in rows]
+    if request.args.get("debtors") == "1":
+        items = [i for i in items if i["debt"] > 0]
+    items.sort(key=lambda i: (i["group"], i["name"]))
+    return jsonify({"ok": True, "items": items, "debtors": sum(1 for i in items if i["debt"] > 0)})
+
+
 @bp.get("/attendance/my")
 @require_auth("student", "parent")
 def my_attendance():
@@ -379,12 +418,15 @@ def _rule_for(rules: list[dict[str, Any]], month: str) -> Optional[dict[str, Any
     return active[-1] if active else None
 
 
-def compute_salary(rule: Optional[dict[str, Any]], base: int) -> int:
-    """Qat'iy: value so'm. Foiz: value = foiz*100 (35.5% -> 3550), tushumdan hisoblanadi."""
+def compute_salary(rule: Optional[dict[str, Any]], base: int, paid_students: int = 0) -> int:
+    """fixed: value so'm. percent: value = foiz*100 (35.5% -> 3550), tushumdan.
+    per_student: value so'm har bir shu oy to'lov qilgan o'quvchi uchun."""
     if not rule:
         return 0
     if rule["type"] == "fixed":
         return int(rule["value"])
+    if rule["type"] == "per_student":
+        return int(rule["value"]) * paid_students
     return int(base) * int(rule["value"]) // 10000
 
 
@@ -410,11 +452,12 @@ def _salary_rows(conn: Any, data: dict[str, Any], center: str, month: str, only_
         rule = _rule_for(rules.get(tid, []), month)
         pays = by_teacher.get(tid, [])
         base = sum(int(x["amount"]) for x in pays)
+        paid_students = len({int(x["student_id"]) for x in pays})
         out.append({
             "teacher_id": tid, "teacher_name": str(t.get("name") or f"#{tid}"),
-            "rule": rule, "base": base, "payments_count": len(pays),
+            "rule": rule, "base": base, "payments_count": len(pays), "paid_students": paid_students,
             "students": sum(1 for s in students.values() if tid in _teacher_ids_of(s) and student_status(s) not in ARCHIVED),
-            "amount": compute_salary(rule, base),
+            "amount": compute_salary(rule, base, paid_students),
             "payments": pays if only_teacher is not None else None,
         })
     out.sort(key=lambda r: r["teacher_name"])
@@ -461,7 +504,7 @@ def salary_rule():
         raw = float(str(body.get("value")).replace(" ", "").replace(",", "."))
     except (TypeError, ValueError):
         return _err("O'qituvchi va qiymatni kiriting")
-    if kind == "fixed":
+    if kind in ("fixed", "per_student"):
         value = int(raw)
         if not 0 <= value <= MAX_AMOUNT:
             return _err("Maosh summasi noto'g'ri")
@@ -470,7 +513,7 @@ def salary_rule():
             return _err("Foiz 0 dan 100 gacha bo'lsin")
         value = round(raw * 100)
     else:
-        return _err("Turi: qat'iy maosh yoki foiz")
+        return _err("Turi: qat'iy maosh, foiz yoki har o'quvchi uchun summa")
     effective_from = _text(body.get("effective_from"), 7) or _this_month()
     if not _YM_RE.match(effective_from):
         return _err("Boshlanish oyi YYYY-MM formatida bo'lsin")
@@ -483,3 +526,86 @@ def salary_rule():
         _x(conn, f"INSERT INTO sal_rules ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", [row[c] for c in cols])
         _audit(conn, p, "salary.rule", "teacher", teacher_id, {"type": kind, "value": value, "from": effective_from})
     return jsonify({"ok": True, "rule": row}), 201
+
+
+# --------------------------------------------------------------------------
+# AI yordamchi
+# --------------------------------------------------------------------------
+def ask_openai(messages: list[dict[str, str]], max_tokens: int = 700) -> tuple[Optional[str], Optional[str]]:
+    """OpenAI chat javobi. (javob, None) yoki (None, xato matni)."""
+    key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not key:
+        return None, "OPENAI_API_KEY sozlanmagan"
+    payload = json.dumps({"model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini"), "messages": messages,
+                          "temperature": 0.3, "max_tokens": max_tokens}).encode("utf-8")
+    req = urllib.request.Request("https://api.openai.com/v1/chat/completions", data=payload, method="POST",
+                                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=35) as res:
+            out = json.loads(res.read().decode("utf-8"))
+        return (out.get("choices", [{}])[0].get("message", {}).get("content", "").strip() or "Javob topilmadi"), None
+    except urllib.error.HTTPError as exc:
+        return None, exc.read().decode("utf-8", errors="ignore") or str(exc)
+    except Exception as exc:  # noqa: BLE001
+        return None, str(exc)
+
+
+def center_snapshot(p: dict[str, Any]) -> dict[str, Any]:
+    """AI uchun markaz holati — faqat umumiy raqamlar, ism/telefon yuborilmaydi."""
+    data = _data()
+    students = _center_students(data, p["center"])
+    counts: dict[str, int] = {}
+    for s in students:
+        counts[student_status(s)] = counts.get(student_status(s), 0) + 1
+    month = _this_month()
+    today = _today()
+    with _db() as conn:
+        balances = _balances(conn, p["center"], [int(s["id"]) for s in students])
+        att = _stats(_all(conn, "SELECT status FROM att_records WHERE center_id = ? AND lesson_date = ?", (p["center"], today.isoformat())))
+        lessons_today = _one(conn, "SELECT COUNT(*) AS n FROM sched_lessons WHERE center_id = ? AND weekday = ? AND status = 'active'",
+                             (p["center"], today.isoweekday()))
+        leads = _all(conn, """SELECT subject, COUNT(*) AS n FROM crm_leads WHERE center_id = ? AND status IN ('new', 'contacted', 'waiting')
+            GROUP BY subject""", (p["center"],))
+        snap: dict[str, Any] = {
+            "sana": today.isoformat(), "oquvchilar_holati": counts, "guruhlar_soni": len({s.get("group") for s in students if s.get("group")}),
+            "bugungi_darslar": int(lessons_today["n"]), "bugungi_davomat": att,
+            "qabul_kutayotganlar_fan_boyicha": {r["subject"]: int(r["n"]) for r in leads},
+        }
+        if is_full_admin(p):
+            fin = _one(conn, """SELECT COALESCE(SUM(amount), 0) AS s, COUNT(*) AS n FROM fin_payments
+                WHERE center_id = ? AND status = 'active' AND day >= ?""", (p["center"], month + "-01"))
+            exp = _one(conn, "SELECT COALESCE(SUM(amount), 0) AS s FROM fin_expenses WHERE center_id = ? AND status = 'active' AND day >= ?",
+                       (p["center"], month + "-01"))
+            debtors = [b["debt"] for b in balances.values() if b["debt"] > 0]
+            snap.update({"shu_oy_tushum": int(fin["s"]), "shu_oy_tolovlar_soni": int(fin["n"]), "shu_oy_xarajat": int(exp["s"]),
+                         "qarzdorlar_soni": len(debtors), "qarz_jami": sum(debtors)})
+    return snap
+
+
+_AI_GUIDE = (
+    "Siz TEXNOO o'quv markazi boshqaruv tizimining yordamchisisiz. O'zbek tilida qisqa va aniq javob bering. "
+    "Faqat berilgan markaz ma'lumotlariga tayaning, raqam o'ylab topmang; ma'lumot bo'lmasa shuni ayting. "
+    "Tizim bo'limlari: 'O'quvchilar (CRM)' — qabul (yangi kelganlar fan bo'yicha), o'quvchi qo'shish, guruhga ko'chirish, "
+    "muzlatish, bitirish/ketish arxivi, o'quvchi profili (tarix, to'lov, sertifikat); 'Moliya va kassa' — to'lov qabul qilish "
+    "(bir oy uchun qayta to'lov mumkin emas), xarajat, oylik tarif va chegirma (sababi bilan), qarzdorlar, CSV eksport; "
+    "'Dars jadvali' — haftalik darslar, to'qnashuv tekshiruvi; 'Davomat' — keldi/kechikdi/sababli/kelmadi; "
+    "'O'qituvchilar oyligi' — qat'iy, foiz yoki har to'lagan o'quvchi uchun summa. Qanday qilishni so'rashsa, qadamma-qadam tushuntiring."
+)
+
+
+@bp.post("/ai")
+@require_auth("admin", "manager")
+def ai_assist():
+    p = g.principal
+    question = _text(_body().get("question"), 1000)
+    if not question:
+        return _err("Savolni yozing")
+    snap = center_snapshot(p)
+    answer, error = ask_openai([
+        {"role": "system", "content": _AI_GUIDE},
+        {"role": "system", "content": "Markaz ma'lumotlari (JSON): " + json.dumps(snap, ensure_ascii=False)},
+        {"role": "user", "content": question},
+    ])
+    if error:
+        return _err("AI javob bermadi: " + error[:300], 503 if "sozlanmagan" in error else 502)
+    return jsonify({"ok": True, "answer": answer})

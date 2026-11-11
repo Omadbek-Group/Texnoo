@@ -167,6 +167,20 @@ _SCHEMA = [
         UNIQUE (center_id, lesson_date, group_name, student_id)
     )""",
     "CREATE INDEX IF NOT EXISTS ix_att_records_student ON att_records (center_id, student_id, lesson_date)",
+    # Qabul: kursga yozilmoqchi bo'lgan yangi kelganlar (fan bo'yicha), guruh ochilguncha kutadi.
+    """CREATE TABLE IF NOT EXISTS crm_leads (
+        id TEXT PRIMARY KEY,
+        center_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        note TEXT,
+        status TEXT NOT NULL DEFAULT 'new',
+        student_id BIGINT,
+        created_by_name TEXT,
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL
+    )""",
     # O'qituvchi oylik sharti: qat'iy (so'm) yoki foiz (value = foiz * 100). Tarix saqlanadi.
     """CREATE TABLE IF NOT EXISTS sal_rules (
         id TEXT PRIMARY KEY,
@@ -232,11 +246,14 @@ def init_finance_db() -> None:
     with _db() as conn:
         for stmt in _SCHEMA:
             _x(conn, stmt)
-        # Mavjud bazalar uchun migratsiya: foizli oylik to'lovni qabul paytidagi o'qituvchiga bog'laydi.
-        if _pg():
-            _x(conn, "ALTER TABLE fin_payments ADD COLUMN IF NOT EXISTS teacher_id BIGINT")
-        elif "teacher_id" not in {r["name"] for r in _all(conn, "PRAGMA table_info(fin_payments)")}:
-            _x(conn, "ALTER TABLE fin_payments ADD COLUMN teacher_id BIGINT")
+        # Mavjud bazalar uchun migratsiya (yangi ustunlar).
+        for table, column, ddl in (("fin_payments", "teacher_id", "BIGINT"),
+                                   ("fin_fees", "discount_pct", "INTEGER NOT NULL DEFAULT 0"),
+                                   ("fin_fees", "discount_reason", "TEXT")):
+            if _pg():
+                _x(conn, f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {ddl}")
+            elif column not in {r["name"] for r in _all(conn, f"PRAGMA table_info({table})")}:
+                _x(conn, f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
     _initialized = True
 
 
@@ -388,6 +405,16 @@ def billable_month(status_events: list[dict[str, Any]], ym: str) -> bool:
     return any(e["to_status"] == "active" for e in ordered if start < e["effective_date"] and e["effective_date"][:7] == ym)
 
 
+def net_fee(fee: dict[str, Any]) -> int:
+    """Chegirmadan keyingi oylik summa."""
+    return int(fee["monthly_fee"]) * (100 - int(fee.get("discount_pct") or 0)) // 100
+
+
+def fee_for_month(fees: list[dict[str, Any]], month: str) -> Optional[dict[str, Any]]:
+    current = sorted((f for f in fees if f["effective_from"] <= month), key=lambda f: (f["effective_from"], f["created_at"]))
+    return current[-1] if current else None
+
+
 def compute_charges(fees: list[dict[str, Any]], as_of_ym: str,
                     status_events: Optional[list[dict[str, Any]]] = None) -> int:
     """Oylik tarif tarixidan as_of_ym oyigacha (shu oy ham) hisoblangan jami summa.
@@ -404,14 +431,15 @@ def compute_charges(fees: list[dict[str, Any]], as_of_ym: str,
     for month in _months(ordered[0]["effective_from"], as_of_ym):
         if status_events and not billable_month(status_events, month):
             continue
-        current = [f for f in ordered if f["effective_from"] <= month]
-        total += int(current[-1]["monthly_fee"]) if current else 0
+        current = fee_for_month(ordered, month)
+        total += net_fee(current) if current else 0
     return total
 
 
 def _balances(conn: Any, center: str, student_ids: Optional[list[int]] = None) -> dict[int, dict[str, int]]:
     """Har bir talaba uchun: hisoblangan, to'langan, qarz (manfiy = avans), joriy tarif."""
-    fee_rows = _all(conn, "SELECT student_id, monthly_fee, effective_from, created_at FROM fin_fees WHERE center_id = ?", (center,))
+    fee_rows = _all(conn, """SELECT student_id, monthly_fee, discount_pct, discount_reason, effective_from, created_at
+        FROM fin_fees WHERE center_id = ?""", (center,))
     paid_rows = _all(conn, """SELECT student_id, SUM(amount) AS paid FROM fin_payments
         WHERE center_id = ? AND status = 'active' GROUP BY student_id""", (center,))
     status_rows = _all(conn, """SELECT student_id, to_status, effective_date, created_at FROM crm_events
@@ -429,15 +457,15 @@ def _balances(conn: Any, center: str, student_ids: Optional[list[int]] = None) -
     for sid in ids:
         student_fees = fees.get(sid, [])
         charged = compute_charges(student_fees, month, statuses.get(sid))
-        current_fee = 0
-        if student_fees:
-            active = [f for f in sorted(student_fees, key=lambda f: (f["effective_from"], f["created_at"])) if f["effective_from"] <= month]
-            current_fee = int(active[-1]["monthly_fee"]) if active else 0
+        current = fee_for_month(student_fees, month)
         out[sid] = {
             "charged": charged,
             "paid": paid.get(sid, 0),
             "debt": charged - paid.get(sid, 0),
-            "monthly_fee": current_fee,
+            "monthly_fee": net_fee(current) if current else 0,
+            "base_fee": int(current["monthly_fee"]) if current else 0,
+            "discount_pct": int(current.get("discount_pct") or 0) if current else 0,
+            "discount_reason": (current.get("discount_reason") or "") if current else "",
         }
     return out
 
@@ -525,6 +553,9 @@ def create_payment():
         existing = _one(conn, "SELECT * FROM fin_payments WHERE center_id = ? AND idempotency_key = ?", (p["center"], key))
         if existing:
             return jsonify({"ok": True, "duplicate": True, "payment": _public_payment(existing)})
+        block = _period_block(conn, p["center"], student_id, period, amount)
+        if block:
+            return _err(block, 409)
         seq = _one(conn, """INSERT INTO fin_counters (center_id, name, value) VALUES (?, 'receipt', 1)
             ON CONFLICT (center_id, name) DO UPDATE SET value = fin_counters.value + 1 RETURNING value""", (p["center"],))
         now = _now_ms()
@@ -565,6 +596,25 @@ def create_payment():
             "receipt_no": payment["receipt_no"], "student_id": student_id, "amount": amount, "method": method, "period": period,
         })
     return jsonify({"ok": True, "payment": _public_payment(payment)}), 201
+
+
+def _period_block(conn: Any, center: str, student_id: int, period: str, amount: int) -> Optional[str]:
+    """Bir oy uchun qayta yoki ortiqcha to'lovni to'xtatadi. Xato matni yoki None."""
+    paid_rows = _all(conn, """SELECT amount FROM fin_payments WHERE center_id = ? AND student_id = ? AND period = ?
+        AND status = 'active'""", (center, student_id, period))
+    paid = sum(int(r["amount"]) for r in paid_rows)
+    fees = _all(conn, "SELECT monthly_fee, discount_pct, effective_from, created_at FROM fin_fees WHERE center_id = ? AND student_id = ?",
+                (center, student_id))
+    fee = fee_for_month(fees, period)
+    due = net_fee(fee) if fee else 0
+    if due:
+        if paid >= due:
+            return f"{period} oyi uchun to'lov to'liq qilingan ({paid:,} so'm). Qayta to'lab bo'lmaydi.".replace(",", " ")
+        if paid + amount > due:
+            return f"{period} oyi uchun qolgan summa: {due - paid:,} so'm.".replace(",", " ")
+    elif any(int(r["amount"]) == amount for r in paid_rows):
+        return f"{period} oyi uchun xuddi shu summa allaqachon to'langan. Qayta to'lab bo'lmaydi."
+    return None
 
 
 def _can_view_student(principal: dict[str, Any], student_id: int) -> bool:
@@ -747,11 +797,22 @@ def set_fee():
         return _err("Boshlanish oyi YYYY-MM formatida bo'lishi kerak")
     if student_id not in _center_students(p["center"]):
         return _err("O'quvchi topilmadi", 404)
+    try:
+        discount = int(str(body.get("discount_pct") or 0).replace(" ", ""))
+    except ValueError:
+        return _err("Chegirma foizi butun son bo'lsin")
+    reason = _text(body.get("discount_reason"), 300)
+    if not 0 <= discount <= 100:
+        return _err("Chegirma 0 dan 100 foizgacha bo'lsin")
+    if discount and len(reason) < 3:
+        return _err("Chegirma sababini yozing")
     row = {
         "id": str(uuid.uuid4()),
         "center_id": p["center"],
         "student_id": student_id,
         "monthly_fee": fee,
+        "discount_pct": discount,
+        "discount_reason": reason if discount else "",
         "effective_from": effective_from,
         "created_by_id": p["id"],
         "created_by_name": p["name"],
@@ -760,7 +821,8 @@ def set_fee():
     cols = list(row)
     with _db() as conn:
         _x(conn, f"INSERT INTO fin_fees ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", [row[c] for c in cols])
-        _audit(conn, p, "fee.set", "student", student_id, {"monthly_fee": fee, "effective_from": effective_from})
+        _audit(conn, p, "fee.set", "student", student_id, {"monthly_fee": fee, "effective_from": effective_from,
+                                                             "discount_pct": discount, "reason": row["discount_reason"]})
         balance = _balances(conn, p["center"], [student_id])[student_id]
     return jsonify({"ok": True, "fee": row, "balance": balance}), 201
 

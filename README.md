@@ -26,7 +26,11 @@ INITIAL_ADMIN_PASSWORD=kamida8belgi     # kirgandan keyin ikkala o'zgaruvchini o
 - Jadval va davomat (`/api/school/*`): haftalik darslar (o'qituvchi/xona/guruh to'qnashuvi tekshiriladi),
   davomat (keldi/kechikdi/sababli/kelmadi), kunlik va oylik statistika. O'quvchi va ota-ona o'zinikini,
   o'qituvchi o'z guruhlarini ko'radi.
-- O'qituvchi oyligi: qat'iy maosh yoki shu oyda qabul qilingan to'lovlardan foiz; o'qituvchi "Oyligim"da o'zinikini ko'radi.
+- O'qituvchi oyligi: qat'iy maosh, shu oyda qabul qilingan to'lovlardan foiz yoki har to'lagan o'quvchi uchun summa;
+  o'qituvchi "Oyligim"da o'zinikini, "O'quvchilarim"da o'quvchilari telefoni, qarzi va davomatini ko'radi.
+- Chegirma oylik tarifga sababi bilan qo'yiladi. Bir oy (davr) uchun ortiqcha yoki qayta to'lov qabul qilinmaydi.
+- Qabul: yangi kelganlar fan bo'yicha yoziladi, guruh ochilganda bir bosishda o'quvchiga aylantiriladi. O'quvchi profilida to'lov va sertifikat.
+- AI yordamchi (admin/menejer): `OPENAI_API_KEY` kerak; AI'ga faqat umumiy raqamlar yuboriladi (ism/telefon yo'q).
 - Moliya (`/api/finance/*`): to'lov, xarajat, oylik tarif, qarzdorlik, kassa, CSV eksport, audit log.
   Yozuvlar o'chirilmaydi — faqat sabab bilan bekor qilinadi. `DATABASE_URL` bo'lsa PostgreSQL'da, aks holda SQLite'da.
 - CRM (`/api/crm/*`, admin menyusida "O'quvchilar (CRM)"): qabul, guruhga ko'chirish, muzlatish,

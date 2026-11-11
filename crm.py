@@ -18,7 +18,7 @@ from typing import Any, Callable, Optional
 from flask import Blueprint, g, jsonify, request
 
 from finance import (
-    _all, _audit, _balances, _body, _db, _err, _now_ms, _paging, _text, _this_month, _today, _x,
+    _all, _audit, _balances, _body, _db, _err, _now_ms, _one, _paging, _text, _this_month, _today, _x,
     _student_name, _norm_phone, init_finance_db, MAX_AMOUNT, _YM_RE, _DAY_RE,
 )
 from security import require_auth
@@ -177,11 +177,15 @@ def list_students():
         rows.append(s)
     rows.sort(key=lambda s: (str(s.get("group") or ""), _student_name(s)))
     page, size = _paging()
-    chunk = rows[(page - 1) * size: page * size]
     with _db() as conn:
-        balances = _balances(conn, p["center"], [int(s["id"]) for s in chunk])
-    return jsonify({"ok": True, "items": [_public(s, balances.get(int(s["id"]))) for s in chunk],
-                    "total": len(rows), "page": page, "page_size": size})
+        balances = _balances(conn, p["center"], [int(s["id"]) for s in rows])
+        if request.args.get("debtors") == "1":
+            rows = [s for s in rows if balances[int(s["id"])]["debt"] > 0]
+        chunk = rows[(page - 1) * size: page * size]
+        enrolled = {int(r["student_id"]): r["d"] for r in _all(conn, """SELECT student_id, MIN(effective_date) AS d FROM crm_events
+            WHERE center_id = ? AND type = 'enrolled' GROUP BY student_id""", (p["center"],))}
+    return jsonify({"ok": True, "items": [{**_public(s, balances.get(int(s["id"]))), "enrolled_at": enrolled.get(int(s["id"]))}
+                                          for s in chunk], "total": len(rows), "page": page, "page_size": size})
 
 
 @bp.get("/students/<int:student_id>/history")
@@ -366,3 +370,91 @@ def change_status(student_id: int):
         _audit(conn, p, "student.status", "student", student_id,
                {"from": event["from_status"], "to": to_status, "reason": reason, "date": when})
     return jsonify({"ok": True, "student": _public(student)})
+
+
+# --------------------------------------------------------------------------
+# Qabul: yangi kelganlar, fan bo'yicha yig'iladi va guruh ochilganda o'quvchiga aylantiriladi
+# --------------------------------------------------------------------------
+LEAD_STATUSES = {"new": "Yangi", "contacted": "Bog'lanildi", "waiting": "Guruh kutmoqda", "enrolled": "Qabul qilindi", "rejected": "Rad etdi"}
+OPEN_LEADS = ("new", "contacted", "waiting")
+
+
+@bp.get("/leads")
+@require_auth("admin", "manager")
+def list_leads():
+    p = g.principal
+    where, params = ["center_id = ?"], [p["center"]]
+    status = request.args.get("status", "open")
+    if status == "open":
+        where.append("status IN ('new', 'contacted', 'waiting')")
+    elif status in LEAD_STATUSES:
+        where.append("status = ?")
+        params.append(status)
+    subject = _text(request.args.get("subject"), 80)
+    if subject:
+        where.append("subject = ?")
+        params.append(subject)
+    q = _text(request.args.get("q"), 80).lower()
+    if q:
+        where.append("(lower(name) LIKE ? OR phone LIKE ?)")
+        params += [f"%{q}%", f"%{q}%"]
+    with _db() as conn:
+        items = _all(conn, f"SELECT * FROM crm_leads WHERE {' AND '.join(where)} ORDER BY created_at DESC LIMIT 500", params)
+        subjects = _all(conn, """SELECT subject, COUNT(*) AS n FROM crm_leads WHERE center_id = ?
+            AND status IN ('new', 'contacted', 'waiting') GROUP BY subject ORDER BY n DESC""", (p["center"],))
+    return jsonify({"ok": True, "items": items, "subjects": [{"subject": r["subject"], "waiting": int(r["n"])} for r in subjects]})
+
+
+@bp.post("/leads")
+@require_auth("admin", "manager")
+def create_lead():
+    p = g.principal
+    body = _body()
+    name = _text(body.get("name"), 120)
+    phone = re.sub(r"[\s\-()]", "", _text(body.get("phone"), 24))
+    subject = _text(body.get("subject"), 80)
+    if not name or not subject:
+        return _err("Ism va fanni kiriting")
+    if not re.match(r"^\+?\d{9,15}$", phone):
+        return _err("Telefon raqam noto'g'ri. Namuna: +998901234567")
+    now = _now_ms()
+    with _db() as conn:
+        dup = _one(conn, f"""SELECT id FROM crm_leads WHERE center_id = ? AND phone = ? AND lower(subject) = lower(?)
+            AND status IN {OPEN_LEADS}""", (p["center"], phone, subject))
+        if dup:
+            return _err("Bu telefon shu fanga allaqachon yozilgan", 409)
+        row = {"id": str(uuid.uuid4()), "center_id": p["center"], "name": name, "phone": phone, "subject": subject,
+               "note": _text(body.get("note"), 300), "status": "new", "student_id": None, "created_by_name": p["name"],
+               "created_at": now, "updated_at": now}
+        cols = list(row)
+        _x(conn, f"INSERT INTO crm_leads ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", [row[c] for c in cols])
+        _audit(conn, p, "lead.create", "lead", row["id"], {"subject": subject})
+    return jsonify({"ok": True, "lead": row}), 201
+
+
+@bp.post("/leads/<lead_id>/status")
+@require_auth("admin", "manager")
+def lead_status(lead_id: str):
+    p = g.principal
+    body = _body()
+    status = str(body.get("status") or "")
+    if status not in LEAD_STATUSES:
+        return _err("Holat noto'g'ri")
+    student_id = body.get("student_id")
+    if status == "enrolled":
+        try:
+            student_id = int(student_id)
+        except (TypeError, ValueError):
+            return _err("Qabul uchun o'quvchi ID kerak")
+        if not any(int(s.get("id") or 0) == student_id for s in _students(p["center"])):
+            return _err("O'quvchi topilmadi", 404)
+    else:
+        student_id = None
+    with _db() as conn:
+        lead = _one(conn, "SELECT * FROM crm_leads WHERE id = ? AND center_id = ?", (lead_id, p["center"]))
+        if not lead:
+            return _err("Yozuv topilmadi", 404)
+        _x(conn, "UPDATE crm_leads SET status = ?, student_id = COALESCE(?, student_id), note = ?, updated_at = ? WHERE id = ?",
+           (status, student_id, _text(body.get("note"), 300) or lead["note"], _now_ms(), lead_id))
+        _audit(conn, p, "lead.status", "lead", lead_id, {"from": lead["status"], "to": status, "student_id": student_id})
+    return jsonify({"ok": True})

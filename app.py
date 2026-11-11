@@ -1174,34 +1174,11 @@ def ai_chat():
                 messages.append({"role": role, "content": content[:1200]})
     messages.append({"role": "user", "content": prompt})
 
-    payload = {
-        "model": Config.OPENAI_MODEL,
-        "messages": messages,
-        "temperature": 0.4,
-        "max_tokens": 700,
-    }
-    body = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        "https://api.openai.com/v1/chat/completions",
-        data=body,
-        method="POST",
-        headers={
-            "Authorization": f"Bearer {Config.OPENAI_API_KEY}",
-            "Content-Type": "application/json",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=35) as res:
-            out = json.loads(res.read().decode("utf-8"))
-        answer = out.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-        return jsonify({"status": "success", "answer": answer or "Javob topilmadi"})
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", errors="ignore")
-        logger.warning("OpenAI API xatosi: %s", detail)
-        return jsonify({"status": "error", "message": detail or str(e)}), 502
-    except Exception as e:  # noqa: BLE001
-        logger.exception("OpenAI so'rovida kutilmagan xato")
-        return jsonify({"status": "error", "message": str(e)}), 502
+    answer, error = school.ask_openai(messages)
+    if error:
+        logger.warning("OpenAI API xatosi: %s", error)
+        return jsonify({"status": "error", "message": error}), 502
+    return jsonify({"status": "success", "answer": answer})
 
 
 @app.route("/api/telegram-link/request", methods=["POST"])
