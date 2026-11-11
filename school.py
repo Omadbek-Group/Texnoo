@@ -457,6 +457,137 @@ def students_list():
                     "birthdays": [i["name"] for i in items if i["birthday"]]})
 
 
+def unmarked_lessons(conn: Any, center: str, day: date, until: str, teacher_id: Optional[int] = None) -> list[dict[str, Any]]:
+    """Shu kuni `until` (HH:MM) gacha tugagan, lekin davomati belgilanmagan darslar."""
+    lessons = _all(conn, """SELECT * FROM sched_lessons WHERE center_id = ? AND weekday = ? AND status = 'active' AND end_time <= ?
+        ORDER BY start_time""", (center, day.isoweekday(), until))
+    marked = {r["group_name"] for r in _all(conn, "SELECT DISTINCT group_name FROM att_records WHERE center_id = ? AND lesson_date = ?",
+                                            (center, day.isoformat()))}
+    return [l for l in lessons if l["group_name"] not in marked and (teacher_id is None or int(l["teacher_id"]) == teacher_id)]
+
+
+@bp.get("/attendance/pending")
+@require_auth("admin", "manager", "teacher")
+def attendance_pending():
+    """Tugagan, lekin davomati qilinmagan bugungi darslar (o'qituvchi faqat o'zinikini ko'radi)."""
+    p = g.principal
+    from datetime import datetime
+    from finance import TZ
+    now = datetime.now(TZ)
+    with _db() as conn:
+        rows = unmarked_lessons(conn, p["center"], now.date(), now.strftime("%H:%M"), p["id"] if p["role"] == "teacher" else None)
+    teachers = _teachers(_data())
+    return jsonify({"ok": True, "items": [_lesson_out(l, teachers) for l in rows]})
+
+
+def attendance_tick(send: Callable[[Any, str], Any], now: Any = None) -> int:
+    """Dars tugaganidan 15 daqiqa o'tib ham davomat qilinmagan bo'lsa — o'qituvchiga Telegram eslatma (bir marta)."""
+    from datetime import datetime, timedelta
+    from finance import TZ
+    now = now or datetime.now(TZ)
+    data = _data()
+    teachers = _teachers(data)
+    centers = {str(s.get("centerId") or "main") for s in data.get("students", []) if isinstance(s, dict)} or {"main"}
+    sent = 0
+    init_finance_db()
+    with _db() as conn:
+        for center in centers:
+            for l in unmarked_lessons(conn, center, now.date(), (now - timedelta(minutes=15)).strftime("%H:%M")):
+                chat = (teachers.get(int(l["teacher_id"])) or {}).get("telegramId")
+                key = f"att:{now.date().isoformat()}:{l['id']}"
+                if not chat or _one(conn, "SELECT key FROM notif_log WHERE key = ?", (key,)):
+                    continue
+                ok = send(chat, f"📋 Eslatma: bugun {l['start_time']}-{l['end_time']} dagi {l['group_name']} ({l['subject']}) darsining davomati hali belgilanmagan.")
+                if ok is not False and not (isinstance(ok, tuple) and ok and ok[0] is False):
+                    _x(conn, "INSERT INTO notif_log (key, created_at) VALUES (?, ?)", (key, _now_ms()))
+                    sent += 1
+    return sent
+
+
+@bp.get("/dashboard")
+@require_auth("admin", "manager")
+def dashboard():
+    """Bosh panel: o'quvchilar, qabul, oylar va manbalar bo'yicha statistika, bugungi darslar; moliya faqat admin/boshliqqa."""
+    from datetime import datetime
+    from finance import TZ
+    p = g.principal
+    data = _data()
+    students = _center_students(data, p["center"])
+    now = datetime.now(TZ)
+    month = now.strftime("%Y-%m")
+    months = []
+    y, m = now.year, now.month
+    for _ in range(12):
+        months.append(f"{y:04d}-{m:02d}")
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+    months.reverse()
+    counts = {k: 0 for k in ("active", "frozen", "graduated", "left")}
+    for s in students:
+        counts[student_status(s)] = counts.get(student_status(s), 0) + 1
+    teachers = _teachers(data)
+    with _db() as conn:
+        enrolled = _all(conn, """SELECT student_id, effective_date FROM crm_events WHERE center_id = ? AND type = 'enrolled'
+            AND effective_date >= ?""", (p["center"], months[0] + "-01"))
+        left = _all(conn, """SELECT effective_date FROM crm_events WHERE center_id = ? AND type = 'status_changed'
+            AND to_status IN ('graduated', 'left') AND effective_date >= ?""", (p["center"], months[0] + "-01"))
+        leads = _all(conn, "SELECT subject, status, source, created_at FROM crm_leads WHERE center_id = ?", (p["center"],))
+        today_lessons = _all(conn, "SELECT * FROM sched_lessons WHERE center_id = ? AND weekday = ? AND status = 'active' ORDER BY start_time",
+                             (p["center"], now.isoweekday()))
+        marks = _all(conn, "SELECT group_name, status FROM att_records WHERE center_id = ? AND lesson_date = ?", (p["center"], now.date().isoformat()))
+        pending = unmarked_lessons(conn, p["center"], now.date(), now.strftime("%H:%M"))
+        balances = _balances(conn, p["center"], [int(s["id"]) for s in students])
+        salary = _salary_rows(conn, data, p["center"], month)
+        fin = None
+        if is_full_admin(p):
+            inc = _all(conn, """SELECT method, SUM(amount) AS s, COUNT(*) AS n FROM fin_payments WHERE center_id = ? AND status = 'active'
+                AND day >= ? GROUP BY method""", (p["center"], month + "-01"))
+            exp = _one(conn, "SELECT COALESCE(SUM(amount), 0) AS s FROM fin_expenses WHERE center_id = ? AND status = 'active' AND day >= ?",
+                       (p["center"], month + "-01"))
+            income = sum(int(r["s"]) for r in inc)
+            debts = [b["debt"] for b in balances.values() if b["debt"] > 0]
+            fin = {"income": income, "payments": sum(int(r["n"]) for r in inc), "by_method": {r["method"]: int(r["s"]) for r in inc},
+                   "expense": int(exp["s"]), "net": income - int(exp["s"]), "debtors": len(debts), "debt_total": sum(debts)}
+    student_source = {int(s["id"]): s.get("source") or "" for s in students}
+    per_month = {mm: {"new": 0, "left": 0, "leads": 0} for mm in months}
+    for e in enrolled:
+        if e["effective_date"][:7] in per_month:
+            per_month[e["effective_date"][:7]]["new"] += 1
+    for e in left:
+        if e["effective_date"][:7] in per_month:
+            per_month[e["effective_date"][:7]]["left"] += 1
+    sources: dict[str, int] = {}
+    for l in leads:
+        mm = datetime.fromtimestamp(int(l["created_at"]) / 1000, TZ).strftime("%Y-%m")
+        if mm in per_month:
+            per_month[mm]["leads"] += 1
+            sources[l["source"] or "unknown"] = sources.get(l["source"] or "unknown", 0) + 1
+    for e in enrolled:
+        src = student_source.get(int(e["student_id"]))
+        if src:
+            sources[src] = sources.get(src, 0) + 1
+    by_group: dict[str, list[dict[str, Any]]] = {}
+    for mk in marks:
+        by_group.setdefault(mk["group_name"], []).append(mk)
+    waiting: dict[str, int] = {}
+    for l in leads:
+        if l["status"] in ("new", "contacted", "trial", "waiting"):
+            waiting[l["subject"]] = waiting.get(l["subject"], 0) + 1
+    return jsonify({
+        "ok": True, "month": month, "counts": counts, "teachers": len([t for t in teachers.values() if t.get("status") != "pending"]),
+        "groups": len({g for s in students if student_status(s) not in ARCHIVED for g in student_groups(s)}),
+        "new_this_month": per_month[month]["new"], "left_this_month": per_month[month]["left"],
+        "months": [{"month": mm, **v} for mm, v in per_month.items()], "sources": sources,
+        "leads_waiting": waiting, "birthdays": [_student_name(s) for s in students if is_birthday(s) and student_status(s) not in ARCHIVED],
+        "today": [{**_lesson_out(l, teachers), **_stats(by_group.get(l["group_name"], [])),
+                   "group_size": len(_group_students(data, p["center"], l["group_name"]))} for l in today_lessons],
+        "unmarked": len(pending),
+        "salary": {"total": sum(r["amount"] for r in salary), "remaining": sum(r["remaining"] for r in salary)},
+        "finance": fin,
+    })
+
+
 @bp.get("/attendance/my")
 @require_auth("student", "parent")
 def my_attendance():
@@ -567,7 +698,9 @@ def salary_my():
         return _err("Oy formati YYYY-MM")
     with _db() as conn:
         rows = _salary_rows(conn, _data(), p["center"], month, only_teacher=p["id"])
-    return jsonify({"ok": True, "month": month, "item": rows[0] if rows else None})
+        payouts = _all(conn, """SELECT kind, amount, note, created_at FROM sal_payouts WHERE center_id = ? AND teacher_id = ?
+            AND month = ? ORDER BY created_at""", (p["center"], p["id"], month))
+    return jsonify({"ok": True, "month": month, "item": rows[0] if rows else None, "payouts": payouts})
 
 
 @bp.post("/salary/rules")
@@ -596,10 +729,17 @@ def salary_rule():
         return _err("Boshlanish oyi YYYY-MM formatida bo'lsin")
     if teacher_id not in _teachers(_data()):
         return _err("O'qituvchi topilmadi", 404)
+    start_date = _text(body.get("start_date"), 10)
+    if start_date and not _DAY_RE.match(start_date):
+        return _err("Ish boshlash sanasi YYYY-MM-DD bo'lsin")
     row = {"id": str(uuid.uuid4()), "center_id": p["center"], "teacher_id": teacher_id, "type": kind, "value": value,
-           "effective_from": effective_from, "created_by_name": p["name"], "created_at": _now_ms()}
+           "effective_from": effective_from, "start_date": start_date or None, "created_by_name": p["name"], "created_at": _now_ms()}
     cols = list(row)
     with _db() as conn:
+        # Kelishilgan shart bir marta qo'yiladi; keyin uni faqat menejer o'zgartira oladi.
+        if _one(conn, "SELECT id FROM sal_rules WHERE center_id = ? AND teacher_id = ? LIMIT 1", (p["center"], teacher_id)) \
+                and p["level"] != "manager":
+            return _err("Shart allaqachon belgilangan. Uni faqat menejer o'zgartira oladi.", 403)
         _x(conn, f"INSERT INTO sal_rules ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", [row[c] for c in cols])
         _audit(conn, p, "salary.rule", "teacher", teacher_id, {"type": kind, "value": value, "from": effective_from})
     return jsonify({"ok": True, "rule": row}), 201
@@ -786,10 +926,11 @@ def start_birthday_job(send: Callable[[Any, str], Any]) -> None:
         while True:
             try:
                 birthday_tick(send)
+                attendance_tick(send)
             except Exception:  # noqa: BLE001
                 import logging
                 logging.getLogger("school").exception("Tug'ilgan kun tabrigi yuborilmadi")
-            time.sleep(3600)
+            time.sleep(900)
     threading.Thread(target=loop, name="birthday-job", daemon=True).start()
 
 

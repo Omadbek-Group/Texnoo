@@ -27,7 +27,7 @@ def client(monkeypatch):
     monkeypatch.setenv("RATE_LIMIT_WRITE", "100000")
     monkeypatch.setenv("RATE_LIMIT_AUTH", "100000")
     sys.path.insert(0, str(ROOT))
-    for name in ("app", "school", "crm", "finance", "security", "data_database"):
+    for name in ("app", "exams", "school", "crm", "finance", "security", "data_database"):
         sys.modules.pop(name, None)
     app_module = importlib.import_module("app")
     data = {
@@ -575,3 +575,102 @@ def test_edu_news_filter(client, monkeypatch):
     out = client.get("/api/school/news", headers=h).get_json()
     assert [i["link"] for i in out["items"]] == ["https://kun.uz/1"]
     assert len(client.get("/api/school/news?all=1", headers=h).get_json()["items"]) == 2
+
+
+# ---------------------------------------------------------------- imtihon, onlayn ariza, bosh panel, oylik qulfi, davomat eslatmasi
+def test_cefr_and_sat_exams(client, monkeypatch):
+    student = login(client, "+998901112233", "pass1")
+    teacher = login(client, "+998900000001", "teach")
+    start = client.post("/api/exams/cefr/start", headers=student).get_json()
+    assert len(start["questions"]) == 30 and all("answer" not in q for q in start["questions"])
+    assert client.post("/api/exams/cefr/start", headers=student).get_json()["attempt_id"] == start["attempt_id"]  # davom ettiradi
+    bank = {q["id"]: q["options"][q["answer"]] for q in client.get("/api/exams/questions?exam=cefr", headers=teacher).get_json()["items"]}
+    answers = [q["options"].index(bank[q["id"]]) for q in start["questions"]]   # variantlar aralashtirilgan
+    res = client.post(f"/api/exams/attempts/{start['attempt_id']}/submit", headers=student, json={"answers": answers}).get_json()
+    assert res["result"]["correct"] == 30 and res["result"]["level"] == "C2"
+    assert client.post(f"/api/exams/attempts/{start['attempt_id']}/submit", headers=student, json={"answers": answers}).status_code == 409
+    sat = client.post("/api/exams/sat/start", headers=student).get_json()
+    sat_bank = {q["id"]: q["options"][q["answer"]] for q in client.get("/api/exams/questions?exam=sat", headers=teacher).get_json()["items"]}
+    exams_mod = sys.modules["exams"]
+    monkeypatch.setattr(exams_mod, "_now_ms", lambda: sat["deadline_at"] + exams_mod.GRACE_MS + 1)   # vaqt o'tib ketdi
+    late = client.post(f"/api/exams/attempts/{sat['attempt_id']}/submit", headers=student,
+                       json={"answers": [q["options"].index(sat_bank[q["id"]]) for q in sat["questions"]]}).get_json()
+    assert late["late"] is True and late["result"]["correct"] == 0 and late["result"]["total_score"] == 400
+    items = client.get("/api/exams/results", headers=teacher).get_json()["items"]
+    assert {i["exam"] for i in items} == {"cefr", "sat"} and items[0]["student_name"] == "Ali Valiyev"
+    assert client.get("/api/exams/results", headers=login(client, "+998900000009", "teach2")).get_json()["items"] == []
+    assert client.get("/exam_bank.json").data == client.get("/").data   # javoblar fayli tashqariga berilmaydi
+    assert client.post("/api/exams/questions", headers=student, json={}).status_code == 403
+
+
+def test_sat_scaled_score():
+    sys.path.insert(0, str(ROOT))
+    from exams import score
+    qs = [{"section": "math", "answer": 0}] * 4 + [{"section": "rw", "answer": 1}] * 2
+    r = score("sat", qs, [0, 0, 1, 1, 1, 0])
+    assert r["scaled"] == {"math": 500, "rw": 500} and r["total_score"] == 1000
+
+
+def test_public_apply_with_source(client):
+    ok = client.post("/api/crm/public/apply", json={"name": "Nodira", "phone": "+998 91 222 33 44", "subject": "IELTS", "source": "instagram"})
+    assert ok.status_code == 201
+    assert client.post("/api/crm/public/apply", json={"name": "Bot", "phone": "+998912223345", "subject": "x", "website": "spam"}).status_code == 200
+    admin = login(client, "+998900000002", "admin")
+    leads = client.get("/api/crm/leads", headers=admin).get_json()["items"]
+    assert [(l["name"], l["source"]) for l in leads] == [("Nodira", "instagram")]
+    for i in range(5):
+        client.post("/api/crm/public/apply", json={"name": "A", "phone": f"+99891000000{i}", "subject": "SAT"})
+    assert client.post("/api/crm/public/apply", json={"name": "A", "phone": "+998910000009", "subject": "SAT"}).status_code == 429
+    assert "instagram" in client.get("/api/crm/public/subjects").get_json()["sources"]
+
+
+def test_dashboard_for_admin_and_manager(client):
+    admin = login(client, "+998900000002", "admin")
+    client.post("/api/crm/students", headers=admin, json={"firstName": "Yangi", "lastName": "Bola", "phone": "+998907000009",
+                                                          "group": "D1", "source": "telegram"})
+    client.post("/api/crm/leads", headers=admin, json={"name": "L", "phone": "+998907000010", "subject": "Python", "source": "youtube"})
+    d = client.get("/api/school/dashboard", headers=admin).get_json()
+    assert len(d["months"]) == 12 and d["months"][-1]["new"] == 1 and d["months"][-1]["leads"] == 1
+    assert d["sources"] == {"telegram": 1, "youtube": 1} and d["leads_waiting"] == {"Python": 1}
+    assert d["finance"] is not None and d["counts"]["active"] == 3
+    m = client.get("/api/school/dashboard", headers=login(client, "+998900000005", "mgr")).get_json()
+    assert m["finance"] is None and "salary" in m
+    assert client.get("/api/school/dashboard", headers=login(client, "+998900000001", "teach")).status_code == 403
+
+
+def test_salary_rule_locked_except_manager(client):
+    admin = login(client, "+998900000002", "admin")
+    manager = login(client, "+998900000005", "mgr")
+    rule = {"teacher_id": 2001, "type": "percent", "value": 40, "start_date": "2025-09-01"}
+    assert client.post("/api/school/salary/rules", headers=admin, json=rule).status_code == 201
+    assert client.post("/api/school/salary/rules", headers=admin, json={**rule, "value": 50}).status_code == 403
+    assert client.post("/api/school/salary/rules", headers=login(client, "+998900000006", "boss"), json={**rule, "value": 50}).status_code == 403
+    assert client.post("/api/school/salary/rules", headers=manager, json={**rule, "value": 45}).status_code == 201
+    row = next(r for r in client.get("/api/school/salary", headers=admin).get_json()["items"] if r["teacher_id"] == 2001)
+    assert row["rule"]["value"] == 4500 and row["rule"]["start_date"] == "2025-09-01"
+    client.post("/api/school/salary/payouts", headers=manager, json={"teacher_id": 2001, "amount": 300000, "kind": "advance"})
+    my = client.get("/api/school/salary/my", headers=login(client, "+998900000001", "teach")).get_json()
+    assert [(x["kind"], x["amount"]) for x in my["payouts"]] == [("advance", 300000)] and my["item"]["advance"] == 300000
+
+
+def test_attendance_reminder_to_teacher(client):
+    from datetime import datetime
+    admin = login(client, "+998900000002", "admin")
+    finance = sys.modules["finance"]
+    today = finance._today()
+    client.post("/api/school/lessons", headers=admin, json={"group": "D1", "subject": "Python", "teacher_id": 2001, "room": "1",
+                                                            "weekday": today.isoweekday(), "start": "08:00", "end": "09:00"})
+    data = client.get("/api/data", headers=admin).get_json()
+    for t in data["teachers"]:
+        if t["id"] == 2001:
+            t["telegramId"] = 777
+    client.post("/api/data", json=data, headers=admin)
+    school = sys.modules["school"]
+    late = datetime(today.year, today.month, today.day, 12, 0, tzinfo=finance.TZ)
+    sent = []
+    assert school.attendance_tick(lambda c, t: sent.append((c, t)) or (True, ""), late) == 1
+    assert school.attendance_tick(lambda c, t: sent.append((c, t)) or (True, ""), late) == 0
+    assert sent[0][0] == 777 and "D1" in sent[0][1]
+    client.post("/api/school/attendance", headers=admin, json={"group": "D1", "date": today.isoformat(), "marks": [{"student_id": 1001, "status": "present"}]})
+    with finance._db() as conn:
+        assert school.unmarked_lessons(conn, "main", today, "23:59") == []

@@ -266,7 +266,9 @@ def init_finance_db() -> None:
                                    ("fin_fees", "discount_pct", "INTEGER NOT NULL DEFAULT 0"),
                                    ("fin_fees", "discount_reason", "TEXT"),
                                    ("crm_leads", "trial_at", "TEXT"),
-                                   ("crm_leads", "trial_group", "TEXT")):
+                                   ("crm_leads", "trial_group", "TEXT"),
+                                   ("crm_leads", "source", "TEXT"),
+                                   ("sal_rules", "start_date", "TEXT")):
             if _pg():
                 _x(conn, f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {ddl}")
             elif column not in {r["name"] for r in _all(conn, f"PRAGMA table_info({table})")}:

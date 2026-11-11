@@ -10,6 +10,8 @@
     supplies: 'Jihozlar / kanselyariya', tax: 'Soliq', other: 'Boshqa'
   };
   const esc = (v) => escHtml(v == null ? '' : v);
+  // onclick="..." ichida xavfsiz JS satri (apostrofli nomlar uchun, masalan O'zbek tili)
+  const jsq = (v) => esc(JSON.stringify(String(v == null ? '' : v)));
   const fmt = (n) => (Number(n) || 0).toLocaleString('ru-RU').replace(/,/g, ' ') + " so'm";
   const pad = (n) => String(n).padStart(2, '0');
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
@@ -219,21 +221,26 @@
   }
 
   // ───────────────────────── Kvitansiya ─────────────────────────
+  // Kassa chekiga o'xshash ko'rinish (80 mm termoprinter kengligi).
   function receiptHtml(p, school) {
-    return `<div style="font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;">
-      <div style="text-align:center;font-weight:700;font-size:14px;">${esc(school)}</div>
-      <div style="text-align:center;margin-bottom:8px;">ELEKTRON KVITANSIYA</div>
-      <div>№: <strong>${esc(p.receipt_no)}</strong></div>
-      <div>Sana: ${dt(p.created_at)}</div>
-      <div>O'quvchi: ${esc(p.student_name)} (ID ${esc(p.student_id)})</div>
-      <div>Guruh: ${esc(p.group_name || '—')}</div>
-      <div>Davr: ${esc(p.period || '—')}</div>
-      <div>To'lov turi: ${METHOD[p.method] || esc(p.method)}</div>
-      <div style="font-size:16px;font-weight:700;margin:6px 0;">Summa: ${fmt(p.amount)}</div>
-      <div>Qabul qildi: ${esc(p.created_by_name)}</div>
-      ${p.note ? `<div>Izoh: ${esc(p.note)}</div>` : ''}
-      ${p.status === 'void' ? `<div style="color:#c00;font-weight:700;">BEKOR QILINGAN: ${esc(p.void_reason)}</div>` : ''}
-      <div style="margin-top:8px;font-size:10px;opacity:.7;">ID: ${esc(p.id)}<br>Bu elektron kvitansiya, fiskal chek emas.</div>
+    const line = '<div style="border-top:1px dashed #000;margin:6px 0;"></div>';
+    const row = (k, v) => `<div style="display:flex;justify-content:space-between;gap:8px;"><span>${k}</span><span style="text-align:right;">${v}</span></div>`;
+    return `<div class="tx-receipt" style="width:280px;max-width:100%;margin:0 auto;background:#fff;color:#000;padding:14px 12px;font-family:'Courier New',Courier,monospace;font-size:12px;line-height:1.45;box-shadow:0 2px 10px rgba(0,0,0,.25);">
+      <div style="text-align:center;font-weight:700;font-size:15px;letter-spacing:1px;">${esc(String(school).toUpperCase())}</div>
+      <div style="text-align:center;font-size:11px;">O'quv markazi</div>
+      ${line}
+      <div style="text-align:center;font-weight:700;">TO'LOV CHEKI</div>
+      ${row('Chek №', esc(p.receipt_no))}${row('Sana', dt(p.created_at))}${row('Kassir', esc(p.created_by_name))}
+      ${line}
+      ${row("O'quvchi", esc(p.student_name))}${row('ID', esc(p.student_id))}${row('Guruh', esc(p.group_name || '—'))}${row('Davr', esc(p.period || '—'))}
+      ${p.note ? row('Izoh', esc(p.note)) : ''}
+      ${line}
+      ${row("To'lov turi", METHOD[p.method] || esc(p.method))}
+      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:16px;margin-top:4px;"><span>JAMI</span><span>${fmt(p.amount)}</span></div>
+      ${p.status === 'void' ? `${line}<div style="text-align:center;font-weight:700;">*** BEKOR QILINGAN ***</div><div style="text-align:center;">${esc(p.void_reason)}</div>` : ''}
+      ${line}
+      <div style="text-align:center;font-size:11px;">To'lovingiz uchun rahmat!</div>
+      <div style="text-align:center;font-size:9px;margin-top:4px;">Elektron kvitansiya · fiskal chek emas<br>${esc(p.id)}</div>
     </div>`;
   }
   async function finShowReceipt(id) {
@@ -241,15 +248,15 @@
       const out = await api('/payments/' + encodeURIComponent(id));
       window.__finReceipt = receiptHtml(out.payment, out.school_name);
       openGlobalModal(`<div class="modal-title"><i class="fas fa-receipt"></i> Kvitansiya</div>
-        <div style="background:var(--card2);border-radius:8px;padding:14px;margin-bottom:12px;">${window.__finReceipt}</div>
+        <div style="background:var(--card2);border-radius:8px;padding:14px;margin-bottom:12px;max-height:60vh;overflow:auto;">${window.__finReceipt}</div>
         <div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="closeGlobalModal()">Yopish</button>
         <button class="btn btn-cyan" style="flex:1;" onclick="finPrintReceipt()"><i class="fas fa-print"></i> Chop etish</button></div>`);
     } catch (e) { showToast('❌ ' + e.message); }
   }
   function finPrintReceipt() {
-    const w = window.open('', '_blank', 'width=420,height=640');
+    const w = window.open('', '_blank', 'width=360,height=640');
     if (!w) { showToast('❗ Brauzer yangi oynani blokladi'); return; }
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kvitansiya</title></head><body style="padding:16px;color:#000;background:#fff;">${window.__finReceipt || ''}</body></html>`);
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Chek</title><style>@page{size:80mm auto;margin:0}body{margin:0;padding:4mm;background:#fff}.tx-receipt{box-shadow:none!important;width:72mm!important;padding:0!important}</style></head><body>${window.__finReceipt || ''}</body></html>`);
     w.document.close(); w.focus(); w.print();
   }
 
@@ -445,7 +452,7 @@
   }
 
   // Kassir/menejer faqat o'z bo'limlarini ko'radi (server ham shunday cheklaydi). '' = hammasi ko'rinadi.
-  const ROLE_PAGES = { cashier: /finpg|tapg|settpg|doLogout/, manager: /crmpg|schedpg|attpg|aicenterpg|tapg|settpg|doLogout/ };
+  const ROLE_PAGES = { cashier: /finpg|tapg|settpg|doLogout/, manager: /dashpg|crmpg|schedpg|attpg|salpg|examadmpg|aicenterpg|tapg|settpg|doLogout/ };
   function finApplyRoleNav(level) {
     const keep = ROLE_PAGES[level];
     document.querySelectorAll('#aNav .nav-item').forEach(el => {
@@ -572,6 +579,7 @@
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <div class="form-group" style="flex:0 0 160px;">${label("TUG'ILGAN SANA (ixtiyoriy)")}<input type="date" class="form-control" id="ccBirth" max="${today()}"></div>
         <div class="form-group" style="flex:1;min-width:180px;">${label('MANZIL (ixtiyoriy)')}<input class="form-control" id="ccAddress" maxlength="200"></div>
+        <div class="form-group" style="flex:0 0 170px;">${label('QAYERDAN ESHITDI')}${sourceSelect('ccSource')}</div>
       </div>
       <div class="form-group">${label("PAROL (bo'sh qolsa avtomatik)")}<input class="form-control" id="ccPass" autocomplete="new-password"></div>
       <div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="closeGlobalModal()">Bekor</button>
@@ -581,7 +589,7 @@
     const v = (id) => document.getElementById(id).value.trim();
     const fee = digits(v('ccFee'));
     const body = { firstName: v('ccFirst'), lastName: v('ccLast'), phone: v('ccPhone'), parentPhone: v('ccParent'), group: v('ccGroup'),
-      start_date: v('ccStart'), birthDate: v('ccBirth'), address: v('ccAddress'), password: document.getElementById('ccPass').value, monthly_fee: fee === '' ? null : Number(fee) };
+      start_date: v('ccStart'), birthDate: v('ccBirth'), address: v('ccAddress'), source: v('ccSource'), password: document.getElementById('ccPass').value, monthly_fee: fee === '' ? null : Number(fee) };
     if (!body.firstName || !body.lastName || !body.phone || !body.group) { showToast("❗ Ism, familiya, telefon va guruh majburiy"); return; }
     const btn = document.getElementById('ccSubmit'); btn.disabled = true;
     try {
@@ -709,13 +717,18 @@
         <div>${label('SANA')}<input type="date" class="form-control" id="attDate" value="${att.date}" max="${today()}" onchange="att.date=this.value;attLoadSheet()"></div>
         <div>${label('OY (STATISTIKA)')}<input type="month" class="form-control" id="attMonth" value="${att.month}" onchange="attSetMonth(this.value)"></div>
       </div></div>
-      <div id="attSheet"></div><div id="attStats"></div>`;
+      <div id="attPending"></div><div id="attSheet"></div><div id="attStats"></div>`;
+    schApi('/attendance/pending').then(out => {
+      const el = document.getElementById('attPending'); if (!el || !out.items.length) return;
+      el.innerHTML = `<div class="card" style="margin-bottom:12px;border-left:3px solid var(--red);"><div class="cb">⚠ Davomat qilinmagan darslar: ${out.items.map(l =>
+        `<button class="btn btn-xs" onclick="att.date='${today()}';attPick(${jsq(l.group_name)})">${esc(l.group_name)} ${esc(l.start_time)}</button>`).join(' ')}</div></div>`;
+    }).catch(() => {});
     window.att = att;
     if (canManage()) schApi('/attendance/today').then(out => {
       document.getElementById('attToday').innerHTML = out.items.length ? `<div class="tw"><table><tbody>${out.items.map(l => `<tr>
         <td style="font-family:'JetBrains Mono',monospace;">${esc(l.start_time)}</td><td><strong>${esc(l.group_name)}</strong></td><td>${esc(l.teacher_name)}</td>
         <td>${l.total ? `${l.present + l.late}/${l.group_size} keldi · ${rate(l.rate)}` : '<span style="color:var(--gold)">belgilanmagan</span>'}</td>
-        <td><button class="btn btn-xs" onclick="attPick('${esc(l.group_name)}')">Ochish</button></td></tr>`).join('')}</tbody></table></div>`
+        <td><button class="btn btn-xs" onclick="attPick(${jsq(l.group_name)})">Ochish</button></td></tr>`).join('')}</tbody></table></div>`
         : box("// Bugun jadvalda dars yo'q");
     }).catch(e => { document.getElementById('attToday').innerHTML = errorBox(e.message, 'attRender()'); });
     try {
@@ -811,7 +824,7 @@
       window.__salRows = out.items;
       document.getElementById('salBody').innerHTML = `<div class="card"><div class="ch"><h4>JAMI: ${fmt(out.total)}</h4></div><div class="cb" style="padding:0;"><div class="tw"><table>
         <thead><tr><th>O'qituvchi</th><th>Shart</th><th>O'quvchilar</th><th>Tushum (shu oy)</th><th>Hisoblangan oylik</th><th>Avans / berilgan</th><th>Qoldi</th><th></th></tr></thead>
-        <tbody>${out.items.map(r => `<tr><td><strong>${esc(r.teacher_name)}</strong></td><td>${ruleText(r.rule)}</td><td>${r.students}</td>
+        <tbody>${out.items.map(r => `<tr><td><strong>${esc(r.teacher_name)}</strong>${r.rule && r.rule.start_date ? `<br><span style="font-size:10px;color:var(--text3);">ish boshlagan: ${esc(r.rule.start_date)}</span>` : ''}</td><td>${ruleText(r.rule)}${r.rule ? ' 🔒' : ''}</td><td>${r.students}</td>
           <td>${fmt(r.base)} <span style="color:var(--text3);font-size:10px;">(${r.payments_count} ta)</span></td>
           <td style="font-weight:700;color:var(--green);white-space:nowrap;">${fmt(r.amount)}</td>
           <td style="white-space:nowrap;">${fmt(r.advance)} / ${fmt(r.paid_out)}</td>
@@ -826,22 +839,25 @@
   function salOpenRule(tid) {
     const r = (window.__salRows || []).find(x => x.teacher_id === tid) || {};
     const rule = r.rule || {};
+    const locked = !!r.rule && !(curUser && curUser.level === 'manager');
     openGlobalModal(`<div class="modal-title"><i class="fas fa-sack-dollar"></i> Oylik sharti: ${esc(r.teacher_name)}</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <div class="form-group" style="flex:1;min-width:140px;">${label('TURI')}<select class="form-control" id="srType">
           <option value="percent" ${rule.type !== 'fixed' ? 'selected' : ''}>Foiz (tushumdan)</option><option value="fixed" ${rule.type === 'fixed' ? 'selected' : ''}>Qat'iy maosh</option><option value="per_student" ${rule.type === 'per_student' ? 'selected' : ''}>Har to'lagan o'quvchi uchun</option></select></div>
         <div class="form-group" style="flex:1;min-width:120px;">${label("QIYMAT (% yoki so'm)")}<input class="form-control" id="srValue" inputmode="decimal" value="${rule.type ? (rule.type === 'percent' ? rule.value / 100 : rule.value) : ''}"></div>
         <div class="form-group" style="flex:1;min-width:130px;">${label('QAYSI OYDAN')}<input type="month" class="form-control" id="srFrom" value="${sal.month}"></div>
+        <div class="form-group" style="flex:1;min-width:140px;">${label('ISH BOSHLAGAN SANA')}<input type="date" class="form-control" id="srStart" value="${esc(rule.start_date || '')}"></div>
       </div>
+      ${locked ? `<div style="font-size:12px;color:var(--gold);margin-bottom:10px;">🔒 Shart kelishilgan va qulflangan. Uni faqat menejer o'zgartira oladi.</div>` : ''}
       <div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="closeGlobalModal()">Bekor</button>
-        <button class="btn btn-cyan" style="flex:1;" onclick="salSaveRule(${tid})"><i class="fas fa-check"></i> Saqlash</button></div>`);
+        <button class="btn btn-cyan" style="flex:1;" ${locked ? 'disabled' : ''} onclick="salSaveRule(${tid})"><i class="fas fa-check"></i> Saqlash</button></div>`);
   }
   async function salSaveRule(tid) {
     const type = document.getElementById('srType').value;
     const raw = document.getElementById('srValue').value.replace(/\s/g, '').replace(',', '.');
     if (raw === '' || isNaN(Number(raw))) { showToast('❗ Qiymatni kiriting'); return; }
     try {
-      await schApi('/salary/rules', { method: 'POST', body: JSON.stringify({ teacher_id: tid, type, value: raw, effective_from: document.getElementById('srFrom').value }) });
+      await schApi('/salary/rules', { method: 'POST', body: JSON.stringify({ teacher_id: tid, type, value: raw, effective_from: document.getElementById('srFrom').value, start_date: document.getElementById('srStart').value }) });
       closeGlobalModal(); showToast('✅ Shart saqlandi'); salRender();
     } catch (e) { showToast('❌ ' + e.message); }
   }
@@ -852,10 +868,15 @@
       <div id="mySalBody">${loading()}</div>`;
     window.sal = sal;
     try {
-      const r = (await schApi('/salary/my?' + qs({ month: sal.month }))).item;
+      const my = await schApi('/salary/my?' + qs({ month: sal.month }));
+      const r = my.item;
       document.getElementById('mySalBody').innerHTML = !r ? box("// Ma'lumot yo'q") : `
         <div class="fin-grid">${stat('HISOBLANGAN OYLIK', fmt(r.amount), sal.month, 'gt')}${stat('OLINGAN AVANS', fmt(r.advance), 'Jami berilgan: ' + fmt(r.paid_out))}${stat('QOLDI', fmt(r.remaining), '', 'yt')}${stat('SHART', ruleText(r.rule), '')}
           ${stat("O'QUVCHILARIM", r.students, r.paid_students + ' tasi shu oy to\'lagan')}${stat('TUSHUM', fmt(r.base), r.payments_count + " ta to'lov")}</div>
+        <div class="card" style="margin-bottom:12px;"><div class="ch"><h4>OLINGAN PULLAR (AVANS VA OYLIK)</h4></div><div class="cb">
+          ${(my.payouts || []).map(x => `<div class="fin-line"><span>${dt(x.created_at)} · ${x.kind === 'advance' ? 'Avans' : 'Oylik'}</span><strong>${fmt(x.amount)}</strong></div>`).join('') || `<div style="color:var(--text3);font-size:12px;">// Bu oyda hali pul berilmagan</div>`}
+          ${r.rule && r.rule.start_date ? `<div style="font-size:11px;color:var(--text3);margin-top:8px;">Ish boshlagan sana: ${esc(r.rule.start_date)}</div>` : ''}
+        </div></div>
         ${r.rule && r.rule.type === 'percent' ? `<div class="card"><div class="ch"><h4>HISOBGA KIRGAN TO'LOVLAR</h4></div><div class="cb" style="padding:0;"><div class="tw"><table>
           <tbody>${(r.payments || []).map(x => `<tr><td>${esc(x.day)}</td><td>${esc(x.student_name)}</td><td>${fmt(x.amount)}</td></tr>`).join('') || `<tr><td>${box("// Bu oyda to'lov yo'q")}</td></tr>`}</tbody>
         </table></div></div></div>` : ''}`;
@@ -890,6 +911,8 @@
   // ───────────────────────── Qabul: yangi kelganlar fan bo'yicha ─────────────────────────
   const LEAD = { new: ['Yangi', 'bb'], contacted: ["Bog'lanildi", 'bg'], trial: ['Sinov darsi', 'bg'], waiting: ['Guruh kutmoqda', 'gr'], enrolled: ['Qabul qilindi', 'gr'], rejected: ['Rad etdi', 'rr'] };
   const leads = { subject: '', status: 'open' };
+  const SOURCE = { instagram: 'Instagram', telegram: 'Telegram', youtube: 'YouTube', facebook: 'Facebook', tiktok: 'TikTok', website: 'Veb-sayt', friend: 'Tanish-bilish', banner: 'Banner / reklama', walkin: "O'zi kelgan", other: 'Boshqa' };
+  const sourceSelect = (id) => `<select class="form-control" id="${id}"><option value="">— tanlang —</option>${Object.entries(SOURCE).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>`;
   async function leadsLoad(body) {
     body = body || document.getElementById('crmBody'); if (!body) return;
     body.innerHTML = loading();
@@ -900,19 +923,21 @@
           <div>${label('ISM FAMILIYA')}<input class="form-control" id="ldName" style="width:170px;"></div>
           <div>${label('TELEFON')}<input class="form-control" id="ldPhone" style="width:150px;" placeholder="+998901234567"></div>
           <div>${label('FAN')}<input class="form-control" id="ldSubject" list="ldSubjects" style="width:150px;" placeholder="Python, Ingliz tili..."><datalist id="ldSubjects">${out.subjects.map(x => `<option value="${esc(x.subject)}">`).join('')}</datalist></div>
+          <div>${label('QAYERDAN ESHITDI')}${sourceSelect('ldSource')}</div>
           <div>${label('IZOH')}<input class="form-control" id="ldNote" style="width:170px;" placeholder="Vaqti, darajasi..."></div>
           <button class="btn btn-success btn-sm" onclick="leadAdd()"><i class="fas fa-plus"></i> Yozish</button>
         </div></div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
           <button class="btn btn-sm ${leads.subject ? '' : 'btn-cyan'}" onclick="leadsSet('subject','')">Barcha fanlar</button>
-          ${out.subjects.map(x => `<button class="btn btn-sm ${leads.subject === x.subject ? 'btn-cyan' : ''}" onclick="leadsSet('subject','${esc(x.subject).replace(/'/g, "\\'")}')">${esc(x.subject)} · ${x.waiting} kutmoqda</button>`).join('')}
+          ${out.subjects.map(x => `<button class="btn btn-sm ${leads.subject === x.subject ? 'btn-cyan' : ''}" onclick="leadsSet('subject',${jsq(x.subject)})">${esc(x.subject)} · ${x.waiting} kutmoqda</button>`).join('')}
+          <button class="btn btn-sm" onclick="leadsChannels()"><i class="fas fa-link"></i> Kanal havolalari</button>
           <select class="form-control" style="width:150px;margin-left:auto;" onchange="leadsSet('status',this.value)">
             <option value="open" ${leads.status === 'open' ? 'selected' : ''}>Kutayotganlar</option>
             ${Object.entries(LEAD).map(([k, v]) => `<option value="${k}" ${leads.status === k ? 'selected' : ''}>${v[0]}</option>`).join('')}</select>
         </div>
         <div class="card"><div class="cb" style="padding:0;"><div class="tw"><table>
-          <thead><tr><th>Ism</th><th>Telefon</th><th>Fan</th><th>Izoh</th><th>Yozilgan</th><th>Holat</th><th></th></tr></thead>
-          <tbody>${out.items.map(l => `<tr><td><strong>${esc(l.name)}</strong></td><td style="font-size:11px;">${esc(l.phone)}</td><td>${esc(l.subject)}</td>
+          <thead><tr><th>Ism</th><th>Telefon</th><th>Fan</th><th>Manba</th><th>Izoh</th><th>Yozilgan</th><th>Holat</th><th></th></tr></thead>
+          <tbody>${out.items.map(l => `<tr><td><strong>${esc(l.name)}</strong></td><td style="font-size:11px;">${esc(l.phone)}</td><td>${esc(l.subject)}</td><td style="font-size:11px;">${esc(SOURCE[l.source] || '—')}</td>
             <td style="font-size:11px;">${esc(l.note || '')}</td><td style="font-size:11px;">${dt(l.created_at)}</td>
             <td><span class="badge ${(LEAD[l.status] || LEAD.new)[1]}">${(LEAD[l.status] || LEAD.new)[0]}</span>${l.trial_at ? `<br><span style="font-size:10px;">🧪 ${esc(l.trial_at.replace('T', ' '))} · ${esc(l.trial_group || '')}</span>` : ''}</td>
             <td style="white-space:nowrap;">${['new', 'contacted', 'trial', 'waiting'].includes(l.status) ? `
@@ -927,7 +952,7 @@
   async function leadAdd() {
     const v = (id) => document.getElementById(id).value.trim();
     try {
-      await crmApi('/leads', { method: 'POST', body: JSON.stringify({ name: v('ldName'), phone: v('ldPhone'), subject: v('ldSubject'), note: v('ldNote') }) });
+      await crmApi('/leads', { method: 'POST', body: JSON.stringify({ name: v('ldName'), phone: v('ldPhone'), subject: v('ldSubject'), note: v('ldNote'), source: v('ldSource') }) });
       showToast("✅ Yozildi"); leadsLoad();
     } catch (e) { showToast('❌ ' + e.message); }
   }
@@ -945,6 +970,7 @@
     document.getElementById('ccFirst').value = first || '';
     document.getElementById('ccLast').value = rest.join(' ');
     document.getElementById('ccPhone').value = l.phone;
+    if (l.source) document.getElementById('ccSource').value = l.source;
     window.__enrollLead = id;
   }
 
@@ -1029,7 +1055,7 @@
     openGlobalModal(`<div class="modal-title"><i class="fas fa-plus"></i> Qo'shimcha kurs: ${esc(s.name)}</div>
       <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">Asosiy guruh (${esc(s.group)}) o'zgarmaydi — o'quvchi yangi guruh darslariga ham qatnashadi.</p>
       <div class="form-group">${label('GURUH')}${groupSelect('coGroup', '')}</div>
-      ${s.extraGroups.length ? `<div style="font-size:12px;margin-bottom:10px;">Hozirgi qo'shimcha kurslar: ${s.extraGroups.map(g => `<button class="btn btn-xs" title="Olib tashlash" onclick="crmSaveCourse(${id},'remove','${esc(g).replace(/'/g, "\\'")}')">${esc(g)} ✕</button>`).join(' ')}</div>` : ''}
+      ${s.extraGroups.length ? `<div style="font-size:12px;margin-bottom:10px;">Hozirgi qo'shimcha kurslar: ${s.extraGroups.map(g => `<button class="btn btn-xs" title="Olib tashlash" onclick="crmSaveCourse(${id},'remove',${jsq(g)})">${esc(g)} ✕</button>`).join(' ')}</div>` : ''}
       <div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="crmHistory(${id})">Orqaga</button>
         <button class="btn btn-success" style="flex:1;" onclick="crmSaveCourse(${id},'add')"><i class="fas fa-check"></i> Qo'shish</button></div>`);
   }
@@ -1148,11 +1174,193 @@
   }
   function eduNewsSet(all) { news.all = all; eduNewsRender(); }
 
+  // ───────────────────────── Kanal havolalari (onlayn ariza) ─────────────────────────
+  function leadsChannels() {
+    const base = location.origin + '/apply.html?src=';
+    const ch = [['instagram', 'Instagram (bio / story)'], ['telegram', 'Telegram kanal'], ['youtube', 'YouTube (tavsif)'], ['facebook', 'Facebook'],
+      ['tiktok', 'TikTok'], ['website', 'Veb-sayt']];
+    openGlobalModal(`<div class="modal-title"><i class="fas fa-link"></i> Kanal havolalari</div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">Bu havolani kanalga joylang. Kimdir ariza qoldirsa, u "Qabul" ro'yxatiga qayerdan kelgani bilan avtomatik tushadi.</p>
+      ${ch.map(([k, t]) => `<div class="form-group">${label(t)}<div style="display:flex;gap:6px;"><input class="form-control" readonly value="${esc(base + k)}" onfocus="this.select()">
+        <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${esc(base + k)}').then(()=>showToast('✅ Nusxalandi'))"><i class="fas fa-copy"></i></button></div></div>`).join('')}
+      <button class="btn" style="width:100%;" onclick="closeGlobalModal()">Yopish</button>`);
+  }
+
+  // ───────────────────────── Bosh panel (admin, boshliq, menejer) ─────────────────────────
+  async function dashRender() {
+    const pg = document.getElementById('dashpg'); if (!pg) return;
+    pg.innerHTML = `<div class="ph"><h2>BOSH PANEL</h2><p>// Markazning bugungi holati — real ma'lumotlar</p></div><div id="dashBody">${loading()}</div>`;
+    try {
+      const d = await schApi('/dashboard');
+      const f = d.finance;
+      const max = Math.max(1, ...d.months.map(m => Math.max(m.new, m.leads, m.left)));
+      const bars = d.months.map((m, i) => {
+        const x = i * 50, hN = m.new / max * 120, hL = m.leads / max * 120, hO = m.left / max * 120;
+        return `<g><title>${m.month}\nYangi o'quvchi: ${m.new}\nAriza: ${m.leads}\nKetgan: ${m.left}</title>
+          <rect x="${x + 4}" y="${130 - hL}" width="13" height="${hL}" style="fill:var(--cyan)" opacity=".55"></rect>
+          <rect x="${x + 18}" y="${130 - hN}" width="13" height="${hN}" style="fill:var(--green)"></rect>
+          <rect x="${x + 32}" y="${130 - hO}" width="13" height="${hO}" style="fill:var(--red)"></rect>
+          <text x="${x + 25}" y="146" text-anchor="middle" style="fill:var(--text3);font-size:10px;">${m.month.slice(5)}</text></g>`;
+      }).join('');
+      const best = [...d.months].sort((a, b) => b.new - a.new)[0], worst = [...d.months].sort((a, b) => a.new - b.new)[0];
+      const srcTotal = Object.values(d.sources).reduce((a, b) => a + b, 0) || 1;
+      document.getElementById('dashBody').innerHTML = `
+        <div class="fin-grid">
+          ${stat("O'QIYOTGANLAR", d.counts.active + d.counts.frozen, `${d.counts.active} faol · ${d.counts.frozen} muzlatilgan`, 'yt')}
+          ${stat('BU OY YANGI', d.new_this_month, d.month, 'gt')}${stat('BU OY KETGAN', d.left_this_month, `${d.counts.graduated} bitirgan jami`, 'rt')}
+          ${stat("O'QITUVCHILAR", d.teachers, d.groups + ' ta guruh')}
+          ${f ? stat('TUSHUM (OY)', fmt(f.income), f.payments + " ta to'lov", 'gt') + stat('XARAJAT (OY)', fmt(f.expense), 'Sof: ' + fmt(f.net), f.net >= 0 ? 'yt' : 'rt') + stat('QARZDORLAR', f.debtors, fmt(f.debt_total), 'rt') : ''}
+          ${stat("O'QITUVCHI OYLIGI", fmt(d.salary.total), 'Qoldi: ' + fmt(d.salary.remaining))}
+        </div>
+        <div class="g2">
+          <div class="card"><div class="ch"><h4>OYLAR BO'YICHA: ARIZA · YANGI · KETGAN</h4></div><div class="cb">
+            <svg viewBox="0 0 600 150" style="width:100%;height:auto;display:block;">${bars}</svg>
+            <div style="font-size:11px;color:var(--text3);margin-top:6px;"><span style="color:var(--cyan)">■</span> Ariza <span style="color:var(--green)">■</span> Yangi o'quvchi <span style="color:var(--red)">■</span> Ketgan</div>
+            <div style="font-size:12px;margin-top:8px;">Eng ko'p kelgan oy: <strong>${best.month} (${best.new})</strong> · eng kam: <strong>${worst.month} (${worst.new})</strong></div>
+          </div></div>
+          <div class="card"><div class="ch"><h4>QAYERDAN ESHITIB KELISHGAN</h4></div><div class="cb">
+            ${Object.entries(d.sources).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div style="margin-bottom:8px;"><div class="fin-line" style="border:0;padding:0;"><span>${esc(SOURCE[k] || (k === 'unknown' ? "Ko'rsatilmagan" : k))}</span><strong>${v}</strong></div>
+              <div style="height:6px;background:var(--card2);border-radius:3px;"><div style="height:6px;width:${Math.round(v / srcTotal * 100)}%;background:var(--cyan);border-radius:3px;"></div></div></div>`).join('') || box("// Hali ma'lumot yo'q")}
+          </div></div>
+        </div>
+        <div class="g2">
+          <div class="card"><div class="ch"><h4>BUGUNGI DARSLAR ${d.unmarked ? `· <span style="color:var(--red)">${d.unmarked} tasi davomatsiz</span>` : ''}</h4></div><div class="cb" style="padding:0;"><div class="tw"><table><tbody>
+            ${d.today.map(l => `<tr><td style="font-family:'JetBrains Mono',monospace;">${esc(l.start_time)}–${esc(l.end_time)}</td><td><strong>${esc(l.group_name)}</strong></td><td>${esc(l.teacher_name)}</td>
+              <td>${l.total ? `${l.present + l.late}/${l.group_size} · ${l.rate}%` : '<span style="color:var(--gold)">belgilanmagan</span>'}</td></tr>`).join('') || `<tr><td>${box("// Bugun dars yo'q")}</td></tr>`}
+          </tbody></table></div></div></div>
+          <div class="card"><div class="ch"><h4>QABUL VA TUG'ILGAN KUNLAR</h4></div><div class="cb">
+            ${Object.entries(d.leads_waiting).map(([k, v]) => `<div class="fin-line"><span>${esc(k)}</span><strong>${v} kutmoqda</strong></div>`).join('') || `<div style="color:var(--text3);font-size:12px;">// Kutayotgan ariza yo'q</div>`}
+            <div style="margin-top:10px;font-size:12px;">🎂 ${d.birthdays.length ? 'Bugun tug\'ilgan kun: <strong>' + d.birthdays.map(esc).join(', ') + '</strong>' : "Bugun tug'ilgan kun yo'q"}</div>
+          </div></div>
+        </div>`;
+    } catch (e) { document.getElementById('dashBody').innerHTML = errorBox(e.message, 'dashRender()'); }
+  }
+
+  // O'qituvchi kirganda: davomati qilinmagan darslar haqida eslatma
+  async function remindPending() {
+    try {
+      const out = await schApi('/attendance/pending');
+      if (out.items.length) mToast(`Davomat qilinmagan: ${out.items.map(l => esc(l.group_name) + ' ' + esc(l.start_time)).join(', ')}`, 'warning', '📋 Eslatma');
+    } catch (e) { /* eslatma muhim emas */ }
+  }
+
+  // ───────────────────────── CEFR va SAT imtihonlari (o'quvchi) ─────────────────────────
+  const exApi = (path, opts) => api(path, opts, '/api/exams');
+  const ex = { run: null, answers: [], timer: null };
+  const resultText = (r) => r.result.level ? `Daraja: <strong>${esc(r.result.level)}</strong>` : `Ball: <strong>${esc(r.result.total_score)}</strong> / 1600`;
+  async function exRender() {
+    const pg = document.getElementById('examspg'); if (!pg) return;
+    clearInterval(ex.timer); ex.run = null;
+    pg.innerHTML = `<div class="ph"><h2>CEFR VA SAT IMTIHONLARI</h2><p>// Amaliy imtihon: vaqt cheklangan, natija taxminiy</p></div><div id="exBody">${loading()}</div>`;
+    try {
+      const out = await exApi('');
+      document.getElementById('exBody').innerHTML = `<div class="g2">${Object.entries(out.exams).map(([k, e]) => `
+          <div class="card"><div class="ch"><h4>${esc(e.name)}</h4></div><div class="cb">
+            <div style="font-size:13px;margin-bottom:10px;">${e.questions} ta savol · ${e.minutes} daqiqa</div>
+            <button class="btn btn-cyan" style="width:100%;" onclick="exStart('${k}')"><i class="fas fa-play"></i> Boshlash</button></div></div>`).join('')}</div>
+        <div class="card"><div class="ch"><h4>NATIJALARIM</h4></div><div class="cb" style="padding:0;"><div class="tw"><table><tbody>
+          ${out.results.map(r => `<tr><td>${esc(r.exam.toUpperCase())}</td><td>${dt(r.submitted_at)}</td><td>${r.correct}/${r.result.total}</td><td>${resultText(r)}</td><td>${r.late ? '<span class="badge rr">VAQT TUGAGAN</span>' : ''}</td></tr>`).join('')
+          || `<tr><td>${box("// Hali imtihon topshirilmagan")}</td></tr>`}</tbody></table></div></div></div>
+        <div style="font-size:10px;color:var(--text3);margin-top:8px;">// Natija amaliy va taxminiy — rasmiy CEFR/SAT sertifikati emas.</div>`;
+    } catch (e) { document.getElementById('exBody').innerHTML = errorBox(e.message, 'exRender()'); }
+  }
+  async function exStart(exam) {
+    if (!confirm('Imtihon boshlansinmi? Vaqt darhol hisoblana boshlaydi.')) return;
+    try {
+      const run = await exApi(`/${exam}/start`, { method: 'POST', body: '{}' });
+      ex.run = run; ex.answers = run.questions.map(() => null);
+      const skew = Date.now() - run.now;
+      const body = document.getElementById('exBody');
+      body.innerHTML = `<div class="card" style="position:sticky;top:0;z-index:2;margin-bottom:12px;"><div class="cb" style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+          <strong>${esc(run.name)}</strong><span id="exTimer" style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;"></span>
+          <button class="btn btn-gold btn-sm" onclick="exSubmit()"><i class="fas fa-flag-checkered"></i> Topshirish</button></div></div>
+        ${run.questions.map((q, i) => `<div class="card" style="margin-bottom:10px;"><div class="cb">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">${i + 1}/${run.questions.length} · ${esc({ grammar: 'Grammatika', vocabulary: "Lug'at", math: 'Math', rw: 'Reading & Writing' }[q.section] || q.section)}</div>
+          <div style="font-weight:600;margin-bottom:8px;">${esc(q.text)}</div>
+          ${q.options.map((o, j) => `<label style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;cursor:pointer;"><input type="radio" name="exq${i}" onchange="exPick(${i},${j})"> <span>${esc(o)}</span></label>`).join('')}
+        </div></div>`).join('')}`;
+      const tick = () => {
+        const left = Math.max(0, run.deadline_at - (Date.now() - skew));
+        const el = document.getElementById('exTimer'); if (!el) { clearInterval(ex.timer); return; }
+        el.textContent = `${String(Math.floor(left / 60000)).padStart(2, '0')}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')}`;
+        el.style.color = left < 60000 ? 'var(--red)' : '';
+        if (!left) { clearInterval(ex.timer); exSubmit(true); }
+      };
+      clearInterval(ex.timer); ex.timer = setInterval(tick, 1000); tick();
+    } catch (e) { showToast('❌ ' + e.message); }
+  }
+  function exPick(i, j) { ex.answers[i] = j; }
+  async function exSubmit(auto) {
+    if (!ex.run) return;
+    const empty = ex.answers.filter(a => a === null).length;
+    if (!auto && empty && !confirm(`${empty} ta savol javobsiz. Baribir topshirasizmi?`)) return;
+    clearInterval(ex.timer);
+    try {
+      const out = await exApi(`/attempts/${ex.run.attempt_id}/submit`, { method: 'POST', body: JSON.stringify({ answers: ex.answers }) });
+      const r = out.result, run = ex.run; ex.run = null;
+      openGlobalModal(`<div class="modal-title"><i class="fas fa-flag-checkered"></i> Natija: ${esc(run.name)}</div>
+        <div class="fin-grid">${stat("TO'G'RI", `${r.correct}/${r.total}`, '')}${r.level ? stat('DARAJA (TAXMINIY)', esc(r.level), 'CEFR', 'gt') : stat('BALL (TAXMINIY)', r.total_score, `Math ${r.scaled.math || '—'} · R&W ${r.scaled.rw || '—'}`, 'gt')}</div>
+        ${Object.entries(r.sections).map(([k, v]) => `<div class="fin-line"><span>${esc({ grammar: 'Grammatika', vocabulary: "Lug'at", math: 'Math', rw: 'Reading & Writing' }[k] || k)}</span><strong>${v.correct}/${v.total}</strong></div>`).join('')}
+        ${out.late ? `<div style="color:var(--red);font-size:12px;margin-top:8px;">Vaqt tugaganidan keyin topshirildi — javoblar hisobga olinmadi.</div>` : ''}
+        <button class="btn btn-cyan" style="width:100%;margin-top:12px;" onclick="closeGlobalModal();exRender()">Yopish</button>`);
+    } catch (e) { showToast('❌ ' + e.message); }
+  }
+
+  // ───────────────────────── Imtihonlar: natijalar va savollar banki (xodimlar, o'qituvchi) ─────────────────────────
+  const exa = { exam: 'cefr', tab: 'results' };
+  async function exAdmRender() {
+    const pg = document.getElementById('examadmpg'); if (!pg) return;
+    pg.innerHTML = `<div class="ph"><h2>IMTIHONLAR (CEFR, SAT)</h2><p>// O'quvchilar natijalari va savollar banki</p></div>
+      <div class="tab-row" style="flex-wrap:wrap;">${[['results', 'Natijalar'], ['cefr', 'CEFR savollari'], ['sat', 'SAT savollari']].map(([k, t]) =>
+        `<button class="tab-btn ${exa.tab === k ? 'active' : ''}" onclick="exAdmSet('${k}')">${t}</button>`).join('')}</div><div id="exAdmBody">${loading()}</div>`;
+    const el = document.getElementById('exAdmBody');
+    try {
+      if (exa.tab === 'results') {
+        const out = await exApi('/results');
+        el.innerHTML = `<div class="card"><div class="cb" style="padding:0;"><div class="tw"><table>
+          <thead><tr><th>O'quvchi</th><th>Guruh</th><th>Imtihon</th><th>Sana</th><th>To'g'ri</th><th>Natija</th></tr></thead>
+          <tbody>${out.items.map(r => `<tr><td><strong>${esc(r.student_name)}</strong></td><td>${esc(r.group)}</td><td>${esc(r.exam.toUpperCase())}</td>
+            <td style="font-size:11px;">${dt(r.submitted_at)}</td><td>${r.correct}/${r.result.total}</td><td>${resultText(r)}${r.late ? ' <span class="badge rr">KECH</span>' : ''}</td></tr>`).join('')
+            || `<tr><td colspan="6">${box("// Hali natija yo'q")}</td></tr>`}</tbody></table></div></div></div>`;
+        return;
+      }
+      const out = await exApi('/questions?exam=' + exa.tab);
+      el.innerHTML = `<div class="card" style="margin-bottom:12px;"><div class="ch"><h4>YANGI SAVOL</h4></div><div class="cb">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <div>${label("BO'LIM")}<select class="form-control" id="eqSection">${out.sections.map(x => `<option value="${x}">${esc({ grammar: 'Grammatika', vocabulary: "Lug'at", math: 'Math', rw: 'Reading & Writing' }[x] || x)}</option>`).join('')}</select></div>
+            <div>${label('DARAJA')}<select class="form-control" id="eqLevel">${out.levels.map(x => `<option>${x}</option>`).join('')}</select></div>
+          </div>
+          <div class="form-group">${label('SAVOL')}<textarea class="form-control" id="eqText" rows="2"></textarea></div>
+          ${[0, 1, 2, 3].map(i => `<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;"><input type="radio" name="eqAns" value="${i}" ${i ? '' : 'checked'} title="To'g'ri javob"><input class="form-control eqOpt" placeholder="Variant ${String.fromCharCode(65 + i)}"></div>`).join('')}
+          <button class="btn btn-success btn-sm" onclick="exAddQuestion()"><i class="fas fa-plus"></i> Qo'shish</button>
+        </div></div>
+        <div class="card"><div class="ch"><h4>BANKDA ${out.items.length} TA SAVOL</h4></div><div class="cb" style="padding:0;"><div class="tw"><table><tbody>
+          ${out.items.map(q => `<tr><td style="font-size:11px;white-space:nowrap;">${esc(q.section)} · ${esc(q.level || '')}</td><td>${esc(q.text)}<br><span style="font-size:11px;color:var(--green);">✔ ${esc(q.options[q.answer])}</span></td>
+            <td><button class="btn btn-xs btn-danger" onclick="exRemoveQuestion('${esc(q.id)}')"><i class="fas fa-trash"></i></button></td></tr>`).join('')}
+        </tbody></table></div></div></div>`;
+    } catch (e) { el.innerHTML = errorBox(e.message, 'exAdmRender()'); }
+  }
+  function exAdmSet(tab) { exa.tab = tab; exAdmRender(); }
+  async function exAddQuestion() {
+    const options = [...document.querySelectorAll('.eqOpt')].map(x => x.value.trim()).filter(Boolean);
+    try {
+      await exApi('/questions', { method: 'POST', body: JSON.stringify({ exam: exa.tab, section: document.getElementById('eqSection').value,
+        level: document.getElementById('eqLevel').value, text: document.getElementById('eqText').value.trim(), options,
+        answer: Number((document.querySelector('input[name="eqAns"]:checked') || {}).value || 0) }) });
+      showToast("✅ Savol qo'shildi"); exAdmRender();
+    } catch (e) { showToast('❌ ' + e.message); }
+  }
+  async function exRemoveQuestion(id) {
+    if (!confirm("Savolni bankdan olib tashlaysizmi?")) return;
+    try { await exApi(`/questions/${encodeURIComponent(id)}/remove`, { method: 'POST', body: '{}' }); exAdmRender(); }
+    catch (e) { showToast('❌ ' + e.message); }
+  }
+
   const css = document.createElement('style');
   css.textContent = `
     .fin-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; margin-bottom:14px; }
     .fin-line { display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid var(--bor2); font-size:12px; }
-    #finpg table td, #finpg table th, #myfinpg table td, #myfinpg table th, #crmpg table td, #crmpg table th, #schedpg td, #attpg td, #attpg th, #salpg td, #salpg th, #myattpg td, #mystudpg td, #mystudpg th { padding:8px 10px; }
+    #finpg table td, #finpg table th, #myfinpg table td, #myfinpg table th, #crmpg table td, #crmpg table th, #schedpg td, #attpg td, #attpg th, #salpg td, #salpg th, #myattpg td, #mystudpg td, #mystudpg th, #dashpg td, #examadmpg td, #examadmpg th, #examspg td { padding:8px 10px; }
     @media (max-width:600px) { #finpg .tab-btn, #crmpg .tab-btn { flex:1 1 30%; } }`;
   document.head.appendChild(css);
 
@@ -1165,6 +1373,7 @@
     salRender, salSetMonth, salOpenRule, salSaveRule, salRenderMy,
     crmCertificate, leadsLoad, leadsSet, leadAdd, leadStatus, leadEnroll, studRender, studSet, aiRender, aiAsk,
     crmEditProfile, crmSaveProfile, crmOpenCourse, crmSaveCourse, leadOpenTrial, leadSaveTrial, schCreateGroup,
-    salOpenPayout, salSavePayout, hwOpenGrades, hwSaveGrades, hwGradeBadge, eduNewsRender, eduNewsSet
+    salOpenPayout, salSavePayout, hwOpenGrades, hwSaveGrades, hwGradeBadge, eduNewsRender, eduNewsSet,
+    leadsChannels, dashRender, remindPending, exRender, exStart, exPick, exSubmit, exAdmRender, exAdmSet, exAddQuestion, exRemoveQuestion
   });
 })();

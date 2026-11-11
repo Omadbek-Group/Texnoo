@@ -37,6 +37,12 @@ INITIAL_ADMIN_PASSWORD=kamida8belgi     # kirgandan keyin ikkala o'zgaruvchini o
 - Tug'ilgan kun: o'quvchi tizimda tabrik ko'radi; Telegram ulangan bo'lsa o'quvchiga tabrik, ustozga eslatma yuboriladi (`BOT_TOKEN` kerak).
 - O'qituvchiga avans/oylik berish: oylikdan ayiriladi va kassada "Ish haqi" xarajati bo'ladi.
 - Ta'lim yangiliklari: `NEWS_RSS_URLS` (standart: kun.uz, gazeta.uz, daryo.uz, uza.uz), har 5 daqiqada yangilanadi.
+- Bosh panel (admin, boshliq, menejer): o'quvchilar, oylar bo'yicha ariza/yangi/ketgan, qayerdan eshitgani, bugungi darslar, moliya (faqat admin/boshliq).
+- Onlayn ariza: `/apply.html?src=instagram` (telegram, youtube, facebook, tiktok, website) — ariza "Qabul"ga manbasi bilan tushadi.
+- O'qituvchi oylik sharti bir marta qo'yiladi, keyin uni faqat menejer o'zgartiradi; ish boshlagan sana saqlanadi.
+- Davomat qilinmasa: ustozga tizimda va Telegram orqali eslatma (dars tugaganidan 15 daqiqa keyin).
+- CEFR va SAT amaliy imtihonlari (`/api/exams`): savollar serverda, variantlar aralashtiriladi, ball serverda hisoblanadi;
+  boshlang'ich savollar `exam_bank.json` da (tashqariga berilmaydi), xodimlar va ustozlar savol qo'sha oladi.
 - Moliya (`/api/finance/*`): to'lov, xarajat, oylik tarif, qarzdorlik, kassa, CSV eksport, audit log.
   Yozuvlar o'chirilmaydi — faqat sabab bilan bekor qilinadi. `DATABASE_URL` bo'lsa PostgreSQL'da, aks holda SQLite'da.
 - CRM (`/api/crm/*`, admin menyusida "O'quvchilar (CRM)"): qabul, guruhga ko'chirish, muzlatish,

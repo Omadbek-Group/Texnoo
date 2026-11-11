@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kursga yozilish</title>
+  <style>
+    :root { --bg: #f4f7fb; --card: #fff; --text: #14213d; --muted: #5c6b86; --line: #d9e1ee; --accent: #0077ff; --ok: #0a8f4d; --err: #c62828; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #070d1a; --card: #0f1a2e; --text: #e6edff; --muted: #8a9cc5; --line: #1f2d48; --accent: #3fa3ff; --ok: #3ddc84; --err: #ff6b6b; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .card { width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    p { color: var(--muted); margin: 0 0 18px; font-size: 14px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 6px; }
+    input, select, textarea { width: 100%; font: inherit; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: inherit; }
+    input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    button { width: 100%; margin-top: 18px; padding: 13px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: .6; }
+    .msg { margin-top: 14px; font-size: 14px; min-height: 20px; }
+    .hp { position: absolute; left: -9999px; }
+  </style>
+</head>
+<body>
+  <form class="card" id="f" novalidate>
+    <h1>Kursga yozilish</h1>
+    <p>Ma'lumotlaringizni qoldiring — siz bilan tez orada bog'lanamiz.</p>
+    <label for="name">Ism familiya</label>
+    <input id="name" autocomplete="name" required maxlength="120">
+    <label for="phone">Telefon raqam</label>
+    <input id="phone" type="tel" autocomplete="tel" placeholder="+998 90 123 45 67" required maxlength="24">
+    <label for="subject">Qaysi kurs</label>
+    <select id="subject" required><option value="">— tanlang —</option></select>
+    <input id="subjectOther" placeholder="Kurs nomini yozing" style="display:none;margin-top:8px;" maxlength="80">
+    <label for="note">Izoh (ixtiyoriy)</label>
+    <textarea id="note" rows="2" maxlength="300" placeholder="Qulay vaqt, darajangiz..."></textarea>
+    <input class="hp" id="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <button id="send" type="submit">Yuborish</button>
+    <div class="msg" id="msg" role="status" aria-live="polite"></div>
+  </form>
+  <script>
+    const src = new URLSearchParams(location.search).get('src') || '';
+    const $ = (id) => document.getElementById(id);
+    fetch('/api/crm/public/subjects').then(r => r.json()).then(out => {
+      $('subject').innerHTML = '<option value="">— tanlang —</option>' +
+        (out.items || []).map(s => `<option></option>`).join('') + '<option value="__other">Boshqa...</option>';
+      [...$('subject').options].slice(1, -1).forEach((o, i) => { o.value = out.items[i]; o.textContent = out.items[i]; });
+    }).catch(() => { $('subject').innerHTML = '<option value="__other">Kurs nomini yozing</option>'; $('subjectOther').style.display = 'block'; });
+    $('subject').onchange = () => { $('subjectOther').style.display = $('subject').value === '__other' ? 'block' : 'none'; };
+    $('f').onsubmit = async (e) => {
+      e.preventDefault();
+      const subject = $('subject').value === '__other' ? $('subjectOther').value.trim() : $('subject').value;
+      const msg = $('msg');
+      if (!$('name').value.trim() || !$('phone').value.trim() || !subject) { msg.style.color = 'var(--err)'; msg.textContent = "Ism, telefon va kursni kiriting."; return; }
+      $('send').disabled = true;
+      try {
+        const res = await fetch('/api/crm/public/apply', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: $('name').value.trim(), phone: $('phone').value.trim(), subject, note: $('note').value.trim(), source: src, website: $('website').value }) });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(out.message || 'Xatolik yuz berdi');
+        msg.style.color = 'var(--ok)'; msg.textContent = out.message || 'Arizangiz qabul qilindi!';
+        $('f').reset();
+        $('subjectOther').style.display = 'none';
+      } catch (err) { msg.style.color = 'var(--err)'; msg.textContent = err.message; }
+      $('send').disabled = false;
+    };
+  </script>
+</body>
+</html>

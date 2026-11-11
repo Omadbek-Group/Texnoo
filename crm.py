@@ -115,6 +115,7 @@ def _public(s: dict[str, Any], balance: Optional[dict[str, int]] = None) -> dict
         "extraGroups": [str(x) for x in s.get("extraGroups") or []] if isinstance(s.get("extraGroups"), list) else [],
         "birthDate": s.get("birthDate") or "",
         "address": s.get("address") or "",
+        "source": s.get("source") or "",
         "status": student_status(s),
         "teacherId": s.get("teacherId"),
         **(balance or {"charged": 0, "paid": 0, "debt": 0, "monthly_fee": 0}),
@@ -298,7 +299,7 @@ def create_student():
         student = {
             "id": new_id, "firstName": first, "lastName": last, "name": f"{first} {last}",
             "phone": phone, "parentPhone": parent_phone, "password": password, "group": group,
-            "birthDate": birth, "address": address,
+            "birthDate": birth, "address": address, "source": _source(body.get("source")),
             "status": "active", "totalCoins": 0, "level": 1, "streak": 0, "refCode": f"REF{new_id}",
         }
         if p["center"] != "main":
@@ -443,19 +444,27 @@ def create_lead():
         return _err("Ism va fanni kiriting")
     if not re.match(r"^\+?\d{9,15}$", phone):
         return _err("Telefon raqam noto'g'ri. Namuna: +998901234567")
+    row = _insert_lead(p, p["center"], name, phone, subject, _text(body.get("note"), 300), _source(body.get("source")))
+    if row is None:
+        return _err("Bu telefon shu fanga allaqachon yozilgan", 409)
+    return jsonify({"ok": True, "lead": row}), 201
+
+
+def _insert_lead(p: Optional[dict[str, Any]], center: str, name: str, phone: str, subject: str, note: str,
+                 source: str) -> Optional[dict[str, Any]]:
     now = _now_ms()
     with _db() as conn:
         dup = _one(conn, f"""SELECT id FROM crm_leads WHERE center_id = ? AND phone = ? AND lower(subject) = lower(?)
-            AND status IN {OPEN_LEADS}""", (p["center"], phone, subject))
+            AND status IN {OPEN_LEADS}""", (center, phone, subject))
         if dup:
-            return _err("Bu telefon shu fanga allaqachon yozilgan", 409)
-        row = {"id": str(uuid.uuid4()), "center_id": p["center"], "name": name, "phone": phone, "subject": subject,
-               "note": _text(body.get("note"), 300), "status": "new", "student_id": None, "created_by_name": p["name"],
-               "created_at": now, "updated_at": now}
+            return None
+        row = {"id": str(uuid.uuid4()), "center_id": center, "name": name, "phone": phone, "subject": subject,
+               "note": note, "status": "new", "student_id": None, "source": source,
+               "created_by_name": (p or {}).get("name") or "Onlayn ariza", "created_at": now, "updated_at": now}
         cols = list(row)
         _x(conn, f"INSERT INTO crm_leads ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", [row[c] for c in cols])
-        _audit(conn, p, "lead.create", "lead", row["id"], {"subject": subject})
-    return jsonify({"ok": True, "lead": row}), 201
+        _audit(conn, p, "lead.create", "lead", row["id"], {"subject": subject, "source": source}, center)
+    return row
 
 
 @bp.post("/leads/<lead_id>/status")
@@ -574,3 +583,53 @@ def edit_courses(student_id: int):
         _insert_event(conn, p, {"student_id": student_id, "type": "course_added" if action == "add" else "course_removed",
                                 "to_group": group, "effective_date": when, "reason": _text(body.get("reason"), 300)}, p["center"])
     return jsonify({"ok": True, "student": _public(student)})
+
+
+
+SOURCES = {"instagram": "Instagram", "telegram": "Telegram", "youtube": "YouTube", "facebook": "Facebook", "tiktok": "TikTok",
+           "website": "Veb-sayt", "friend": "Tanish-bilish", "banner": "Banner / reklama", "walkin": "O'zi kelgan", "other": "Boshqa"}
+
+
+def _source(value: Any) -> str:
+    value = str(value or "").strip().lower()
+    return value if value in SOURCES else ""
+
+
+# --------------------------------------------------------------------------
+# Ochiq onlayn ariza: Telegram/Instagram/YouTube va boshqa kanallardagi havola orqali (?src=instagram)
+# --------------------------------------------------------------------------
+_apply_hits: dict[str, list[float]] = {}
+
+
+@bp.get("/public/subjects")
+def public_subjects():
+    with _db() as conn:
+        rows = _all(conn, "SELECT DISTINCT subject FROM sched_lessons WHERE status = 'active'")
+    subjects = {r["subject"] for r in rows} | {str(x.get("subject")) for x in _dataset["read"]().get("groups", [])
+                                               if isinstance(x, dict) and x.get("subject")}
+    return jsonify({"ok": True, "items": sorted(subjects), "sources": SOURCES})
+
+
+@bp.post("/public/apply")
+def public_apply():
+    from flask import request as req
+    ip = (req.headers.get("X-Forwarded-For", "").split(",")[0].strip() or req.remote_addr or "?")
+    now = time.time()
+    hits = [t for t in _apply_hits.get(ip, []) if now - t < 600]
+    if len(hits) >= 5:
+        return _err("Juda ko'p ariza yuborildi. Birozdan keyin urinib ko'ring.", 429)
+    _apply_hits[ip] = hits + [now]
+    body = _body()
+    if body.get("website"):  # bot-tuzoq maydoni: odam uni ko'rmaydi
+        return jsonify({"ok": True})
+    name = _text(body.get("name"), 120)
+    phone = re.sub(r"[\s\-()]", "", _text(body.get("phone"), 24))
+    subject = _text(body.get("subject"), 80)
+    if len(name) < 2 or not subject:
+        return _err("Ism va fanni kiriting")
+    if not re.match(r"^\+?\d{9,15}$", phone):
+        return _err("Telefon raqam noto'g'ri. Namuna: +998901234567")
+    row = _insert_lead(None, "main", name, phone, subject, _text(body.get("note"), 300), _source(body.get("source")) or "other")
+    if row is None:
+        return jsonify({"ok": True, "message": "Arizangiz allaqachon qabul qilingan"})
+    return jsonify({"ok": True, "message": "Arizangiz qabul qilindi! Tez orada siz bilan bog'lanamiz."}), 201

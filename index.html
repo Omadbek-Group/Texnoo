@@ -4157,6 +4157,7 @@
         <div class="g2" style="margin-bottom:0;">
           <div class="form-group"><label>Har bir to'g'ri javob uchun tanga</label><input type="number" class="form-control" id="tstCoin" value="10" min="1"></div>
           <div class="form-group"><label>Vaqt chegarasi (daqiqa, 0 = cheklanmagan)</label><input type="number" class="form-control" id="tstTimeLimit" value="0" min="0"></div>
+          <div class="form-group"><label>Kimga</label><select class="form-control" id="tstTarget"></select></div>
         </div>
         <div class="card" style="margin:0 0 14px;border-left:3px solid var(--purple);">
           <div class="ch" style="padding:9px 12px;"><h4 style="font-size:11px;">📋 WORD/PDF'DAN NUSXALAB IMPORT QILISH</h4></div>
@@ -4422,6 +4423,7 @@
         <div class="nav-item" onclick="showPage('hpg',this,'FAOLLIK TARIXI')"><i class="fas fa-history"></i> Faollik
           tarixi</div>
         <div class="nav-item" onclick="showPage('testspg',this,'TESTLAR')"><i class="fas fa-file-alt"></i> Testlar</div>
+        <div class="nav-item" onclick="showPage('examspg',this,'CEFR VA SAT IMTIHONLARI')"><i class="fas fa-file-signature" style="color:var(--gold);"></i> CEFR va SAT</div>
         <div class="nav-item" onclick="showPage('codepg',this,'KOD YOZISH')"><i class="fas fa-laptop-code"></i> Kod yozish</div>
         <div class="nav-item" onclick="showPage('slpg',this,'DARS MAVZUSI')"><i class="fas fa-book-open"></i> Dars mavzusi</div>
         <div class="nav-item" onclick="showPage('hwspg',this,'VAZIFALARIM')"><i class="fas fa-tasks"></i> Vazifalarim <span class="badge-notif" id="hwPendingBadge" style="display:none;">0</span></div>
@@ -4449,6 +4451,7 @@
         <div class="nav-item" onclick="showPage('mystudpg',this,'O\'QUVCHILARIM')"><i class="fas fa-user-graduate" style="color:var(--cyan);"></i> O'quvchilarim</div>
         <div class="nav-item" onclick="showPage('attpg',this,'DAVOMAT')"><i class="fas fa-user-check" style="color:var(--green);"></i> Davomat</div>
         <div class="nav-item" onclick="showPage('schedpg',this,'DARS JADVALIM')"><i class="fas fa-calendar-week"></i> Dars jadvalim</div>
+        <div class="nav-item" onclick="showPage('examadmpg',this,'IMTIHONLAR (CEFR, SAT)')"><i class="fas fa-file-signature" style="color:var(--gold);"></i> Imtihonlar (CEFR, SAT)</div>
         <div class="nav-item" onclick="showPage('mysalpg',this,'OYLIGIM')"><i class="fas fa-sack-dollar" style="color:var(--gold);"></i> Oyligim</div>
         <div class="nav-item" onclick="showPage('lpg',this,'ISH REJA')"><i class="fas fa-book-open"></i> Ish reja (mavzu)</div>
         <div class="nav-item" onclick="showPage('hwmgrpg',this,'VAZIFA BERISH')"><i class="fas fa-tasks"></i> Vazifa berish</div>
@@ -4466,6 +4469,7 @@
       <!-- ADMIN NAV -->
       <nav class="app-nav" id="aNav" style="display:none;">
         <div class="nav-sec">Admin paneli</div>
+        <div class="nav-item" onclick="showPage('dashpg',this,'BOSH PANEL')"><i class="fas fa-gauge-high" style="color:var(--cyan);"></i> Bosh panel</div>
         <div class="nav-item active" onclick="showPage('admpg',this,'ADMIN PANEL')"><i
             class="fas fa-tachometer-alt"></i> Dashboard</div>
         <div class="nav-item" onclick="showPage('stpg',this,'TALABALAR')"><i class="fas fa-users"></i> Barcha talabalar
@@ -4473,6 +4477,7 @@
         <div class="nav-item" onclick="showPage('crmpg',this,'O\'QUVCHILAR (CRM)')"><i class="fas fa-address-book" style="color:var(--cyan);"></i> O'quvchilar (CRM)</div>
         <div class="nav-item" onclick="showPage('schedpg',this,'DARS JADVALI')"><i class="fas fa-calendar-week" style="color:var(--cyan);"></i> Dars jadvali</div>
         <div class="nav-item" onclick="showPage('attpg',this,'DAVOMAT')"><i class="fas fa-user-check" style="color:var(--green);"></i> Davomat</div>
+        <div class="nav-item" onclick="showPage('examadmpg',this,'IMTIHONLAR (CEFR, SAT)')"><i class="fas fa-file-signature" style="color:var(--gold);"></i> Imtihonlar (CEFR, SAT)</div>
         <div class="nav-item" onclick="showPage('aicenterpg',this,'AI YORDAMCHI')"><i class="fas fa-robot" style="color:var(--green);"></i> AI yordamchi</div>
         <div class="nav-item" onclick="showPage('salpg',this,'O\'QITUVCHILAR OYLIGI')"><i class="fas fa-sack-dollar" style="color:var(--gold);"></i> O'qituvchilar oyligi</div>
         <div class="nav-item" onclick="showPage('newsmgrpg',this,'YANGILIKLAR')"><i class="fas fa-newspaper"></i> Yangiliklar</div>
@@ -4708,6 +4713,9 @@
         <div class="page" id="myattpg"></div>
         <div class="page" id="mystudpg"></div>
         <div class="page" id="aicenterpg"></div>
+        <div class="page" id="dashpg"></div>
+        <div class="page" id="examspg"></div>
+        <div class="page" id="examadmpg"></div>
 
         <!-- TALABA BOSH SAHIFA -->
         <div class="page active" id="dpg">
@@ -5943,28 +5951,6 @@
             </div>
           </div>
           <div class="g2">
-            <div class="card">
-              <div class="ch">
-                <h4>TIZIM HOLATI</h4>
-              </div>
-              <div class="cb">
-                <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
-                  <div
-                    style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bor2);">
-                    <span style="color:var(--text3);font-family:'JetBrains Mono',monospace;">Server holati</span><span
-                      class="badge gr">FAOL ✅</span>
-                  </div>
-                  <div
-                    style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bor2);">
-                    <span style="color:var(--text3);font-family:'JetBrains Mono',monospace;">Ma'lumotlar
-                      bazasi</span><span class="badge gr">ULANGAN ✅</span>
-                  </div>
-                  <div style="display:flex;justify-content:space-between;padding:8px 0;"><span
-                      style="color:var(--text3);font-family:'JetBrains Mono',monospace;">Tizim versiyasi</span><span
-                      style="color:var(--cyan);font-family:'JetBrains Mono',monospace;">v3.1</span></div>
-                </div>
-              </div>
-            </div>
             <div class="card">
               <div class="ch">
                 <h4>TEZKOR AMALLAR</h4>
@@ -7226,12 +7212,12 @@
       saveData();
       applyThemeFromPrefs();
       if (r === 'student') { initS(); showPage('dpg', null, 'BOSH SAHIFA'); }
-      else if (r === 'teacher') { initT(); showPage('adpg', null, 'STATISTIKA'); }
+      else if (r === 'teacher') { initT(); showPage('adpg', null, 'STATISTIKA'); remindPending(); }
       else if (r === 'parent') { initP(); showPage('parentChildPg', null, 'FARZANDIM'); }
       else if (r === 'employer') { initE(); showPage('ejobspg', null, "ISH E'LONLARIM"); }
       else if (curUser.level === 'cashier') { finApplyRoleNav('cashier'); showPage('finpg', null, 'MOLIYA VA KASSA'); }
-      else if (curUser.level === 'manager') { finApplyRoleNav('manager'); showPage('crmpg', null, "O'QUVCHILAR (CRM)"); }
-      else { finApplyRoleNav(''); initA(); showPage('admpg', null, 'ADMIN DASHBOARD'); }
+      else if (curUser.level === 'manager') { finApplyRoleNav('manager'); showPage('dashpg', null, 'BOSH PANEL'); }
+      else { finApplyRoleNav(''); initA(); showPage('dashpg', null, 'BOSH PANEL'); }
       renderCChats(); renderCFriends(); renderCReqs(); renderCMarket();
       initEP(); initSP(); initReactPick(); renderMktPage(); fillCoinSelects();
       // Talaba bo'lsa — coin/olmos/inventar/equip holatini serverdan tortib,
@@ -9848,6 +9834,9 @@
       if (id === 'mystudpg') { try { studRender(); } catch (e) { console.warn('MYSTUD render:', e); } }
       if (id === 'newspg') { try { eduNewsRender(); } catch (e) { console.warn('EDUNEWS render:', e); } }
       if (id === 'aicenterpg') { try { aiRender(); } catch (e) { console.warn('AI render:', e); } }
+      if (id === 'dashpg') { try { dashRender(); } catch (e) { console.warn('DASH render:', e); } }
+      if (id === 'examspg') { try { exRender(); } catch (e) { console.warn('EXAM render:', e); } }
+      if (id === 'examadmpg') { try { exAdmRender(); } catch (e) { console.warn('EXAMADM render:', e); } }
       if (id === 'certspg') { try { renderCertificatesList(); } catch (e) { console.warn('CERTSPG render:', e); } }
       if (id === 'certsadminpg') { try { renderCertsAdmin(); } catch (e) { console.warn('CERTSADMIN render:', e); } }
       if (id === 'jobspg') { try { renderStudentJobsPage(); } catch (e) { console.warn('JOBSPG render:', e); } }
@@ -10808,6 +10797,10 @@
       document.getElementById('tstTitle').value = '';
       document.getElementById('tstCoin').value = 10;
       document.getElementById('tstTimeLimit').value = 0;
+      const mine = DB.students.filter(s => studentTeacherIds(s).includes(String(curUser.id)));
+      document.getElementById('tstTarget').innerHTML = `<option value="all">👥 Barcha o'quvchilarim</option>` +
+        [...new Set(mine.flatMap(s => [s.group || 'D1', ...(s.extraGroups || [])]))].sort().map(g => `<option value="g:${escHtml(g)}">Guruh: ${escHtml(g)}</option>`).join('') +
+        mine.map(s => `<option value="s:${s.id}">O'quvchi: ${escHtml(s.name)} (${escHtml(s.group || '')})</option>`).join('');
       document.getElementById('tstQList').innerHTML = '';
       tstQCount = 0;
       addTstQ(); addTstQ();
@@ -10881,7 +10874,10 @@
       });
       if (!questions.length) { showToast('❗ Kamida 1 ta to\'liq savol kiriting'); return; }
       DB.tests = DB.tests || [];
+      const tgt = (document.getElementById('tstTarget') || {}).value || 'all';
       DB.tests.push({
+        targetType: tgt === 'all' ? 'all' : tgt.startsWith('g:') ? 'group' : 'student',
+        targetGroup: tgt.startsWith('g:') ? tgt.slice(2) : '', targetStudentId: tgt.startsWith('s:') ? Number(tgt.slice(2)) : null,
         id: 'test' + Date.now(), title, coinPer, timeLimit, questions,
         teacherId: curUser.id, teacherName: curUser.name, createdAt: Date.now(), active: true
       });
@@ -10934,7 +10930,7 @@
     function renderStudentTests() {
       const el = document.getElementById('availableTests'); if (!el) return;
       const myTeacherIds = studentTeacherIds(curUser);
-      const tests = (DB.tests || []).filter(t => t.active && myTeacherIds.includes(String(t.teacherId)));
+      const tests = (DB.tests || []).filter(t => t.active && myTeacherIds.includes(String(t.teacherId)) && (!t.targetType || hwIsForStudent(t, curUser)));
       if (!tests.length) {
         el.innerHTML = `<div class="card"><div class="cb" style="color:var(--text3);font-size:13px;text-align:center;padding:30px;font-family:'JetBrains Mono',monospace;">// Test mavjud emas</div></div>`;
         return;
