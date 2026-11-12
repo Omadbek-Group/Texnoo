@@ -82,6 +82,29 @@ export function StudentsPage() {
     }
   }
 
+  // Qabul/davomat: keldi, kelmadi yoki chaqirildi (chaqirildi — ABSENT + izoh).
+  async function markArrival(kind: 'arrived' | 'absent' | 'called') {
+    if (!profile) return;
+    setProfileError('');
+    const map = {
+      arrived: { status: 'PRESENT', note: '' },
+      absent: { status: 'ABSENT', note: 'kelmadi' },
+      called: { status: 'ABSENT', note: 'chaqirildi' }
+    } as const;
+    try {
+      await axios.post('/api/attendance', {
+        studentId: profile.id,
+        groupId: profile.groupId,
+        date: new Date().toISOString(),
+        status: map[kind].status,
+        note: map[kind].note
+      });
+      await openProfile(profile);
+    } catch (err: any) {
+      setProfileError(err.response?.data?.error || 'Davomatni saqlab bo\'lmadi.');
+    }
+  }
+
   const paidTotal = profile?.payments?.reduce((sum: number, p: any) => sum + Number(p.amount), 0) ?? 0;
   const monthlyFee = profile?.group?.monthlyFee ?? 0;
   const [editing, setEditing] = useState<Student | null>(null);
@@ -287,7 +310,11 @@ export function StudentsPage() {
               students.map(student => (
                 <tr key={student.id}>
                   <td>{student.studentId}</td>
-                  <td>{student.firstName} {student.lastName}</td>
+                  <td>
+                    <button type="button" className="link-button" onClick={() => openProfile(student)}>
+                      {student.firstName} {student.lastName}
+                    </button>
+                  </td>
                   <td>{student.phone}</td>
                   <td>{student.group.name}</td>
                   <td>{student.status}</td>
@@ -329,6 +356,11 @@ export function StudentsPage() {
                 <option value="TRANSFER">O'tkazma</option>
               </select>
             </label>
+            <div className="form-actions">
+              <button type="button" className="primary-button" onClick={() => markArrival('arrived')}>Keldi</button>
+              <button type="button" className="outline-button" onClick={() => markArrival('called')}>Chaqirildi</button>
+              <button type="button" className="outline-button" onClick={() => markArrival('absent')}>Kelmadi</button>
+            </div>
             {profileError && <div className="alert">{profileError}</div>}
             <button type="button" className="primary-button" onClick={payForStudent} disabled={!payAmount}>
               To'lov qilish
