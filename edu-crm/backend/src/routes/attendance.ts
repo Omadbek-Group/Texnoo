@@ -66,7 +66,10 @@ router.post('/', authorize(['ADMIN', 'MANAGER', 'TEACHER']), async (req, res) =>
     include: { student: true, group: true }
   });
 
-  res.status(201).json(attendance);
+  // "Keldi" xabari: o'quvchi darsga kelganda ekranda ko'rsatiladi.
+  const arrived = status === 'PRESENT' || status === 'LATE';
+  const message = arrived ? `${attendance.student.firstName} ${attendance.student.lastName} keldi` : undefined;
+  res.status(201).json({ ...attendance, message });
 });
 
 router.get('/student/:studentId', authorize(['ADMIN', 'MANAGER', 'TEACHER']), async (req, res) => {

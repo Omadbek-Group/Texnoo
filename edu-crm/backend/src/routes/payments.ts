@@ -46,6 +46,23 @@ router.get('/', authorize(['ADMIN', 'MANAGER', 'CASHIER']), async (req, res) => 
   res.json({ data: payments, meta: { page, limit, total } });
 });
 
+// Qarzdorlar: joriy oyda to'lovi guruh oylik to'lovidan kam bo'lgan faol o'quvchilar.
+router.get('/debtors', authorize(['ADMIN', 'MANAGER', 'CASHIER']), async (_req, res) => {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const students = await prisma.student.findMany({
+    where: { status: 'ACTIVE', group: { monthlyFee: { gt: 0 } } },
+    include: { group: { include: { course: true, teacher: true } }, payments: { where: { paidAt: { gte: monthStart } } } }
+  });
+  const debtors = students
+    .map(s => {
+      const paid = s.payments.reduce((sum, p) => sum + Number(p.amount), 0);
+      return { id: s.id, studentId: s.studentId, firstName: s.firstName, lastName: s.lastName, phone: s.phone, parentPhone: s.parentPhone, group: s.group, paid, owed: s.group.monthlyFee - paid };
+    })
+    .filter(d => d.owed > 0);
+  res.json({ data: debtors, meta: { total: debtors.length, month: monthStart.toISOString().slice(0, 7) } });
+});
+
 router.post('/', authorize(['ADMIN', 'MANAGER', 'CASHIER']), async (req, res) => {
   const { studentId, groupId, amount, method, paidAt, reference, note } = req.body;
   if (!studentId || !groupId || !amount || !method) {
