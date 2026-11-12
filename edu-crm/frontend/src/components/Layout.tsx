@@ -19,6 +19,7 @@ export function Layout() {
           <NavLink to="/payments">Payments</NavLink>
           <NavLink to="/attendance">Attendance</NavLink>
           <NavLink to="/schedule">Schedule</NavLink>
+          <NavLink to="/practice">Mashq testi</NavLink>
         </nav>
         <button className="outline-button" onClick={logout}>Logout</button>
       </aside>

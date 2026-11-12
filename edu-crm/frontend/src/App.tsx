@@ -8,6 +8,7 @@ import { ClassroomsPage } from './pages/ClassroomsPage';
 import { PaymentsPage } from './pages/PaymentsPage';
 import { AttendancePage } from './pages/AttendancePage';
 import { SchedulePage } from './pages/SchedulePage';
+import { PracticePage } from './pages/PracticePage';
 import { UsersPage } from './pages/UsersPage';
 import { LoginPage } from './pages/LoginPage';
 import { AuthProvider, useAuth, UserRole } from './stores/auth';
@@ -72,6 +73,7 @@ function App() {
           <Route path="payments" element={<PaymentsPage />} />
           <Route path="attendance" element={<AttendancePage />} />
           <Route path="schedule" element={<SchedulePage />} />
+          <Route path="practice" element={<PracticePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
