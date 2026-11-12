@@ -1,0 +1,13 @@
+{
+  "subject": "Dasturlash (coding) — asosiy bilim",
+  "questions": [
+    { "id": 1, "text": "JavaScript: `typeof null` natijasi qanday?", "options": ["null", "object", "undefined", "number"], "answer": 1 },
+    { "id": 2, "text": "Python: `len([1, 2, 3][1:])` natijasi?", "options": ["3", "2", "1", "0"], "answer": 1 },
+    { "id": 3, "text": "SQL: bir nechta qatorni guruhlab sanash uchun qaysi kalit so'z?", "options": ["ORDER BY", "GROUP BY", "WHERE", "JOIN"], "answer": 1 },
+    { "id": 4, "text": "HTTP: resursni yaratish uchun odatda qaysi metod ishlatiladi?", "options": ["GET", "DELETE", "POST", "HEAD"], "answer": 2 },
+    { "id": 5, "text": "Big-O: ikkilik qidiruv (binary search) murakkabligi?", "options": ["O(n)", "O(log n)", "O(n^2)", "O(1)"], "answer": 1 },
+    { "id": 6, "text": "Git: o'zgarishlarni navbatga qo'yish (stage) buyrug'i?", "options": ["git commit", "git add", "git push", "git init"], "answer": 1 },
+    { "id": 7, "text": "JavaScript: `[] + {}` natijasi?", "options": ["0", "NaN", "[object Object]", "undefined"], "answer": 2 },
+    { "id": 8, "text": "REST: o'chirish uchun odatda qaysi HTTP metod?", "options": ["PUT", "DELETE", "PATCH", "GET"], "answer": 1 }
+  ]
+}
