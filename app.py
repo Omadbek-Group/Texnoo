@@ -1148,6 +1148,16 @@ def admin_exchange_rate():
     }})
 
 
+# Texno AI uchun sayt va markaz ma'lumoti. Markaz manzili, telefoni va narxlarni shu yerda yangilang.
+SITE_INFO = """Sayt: texnoo.com. Platforma: o'quv markazi uchun CRM va o'quvchi ilovasi.
+Asosiy imkoniyatlar:
+- O'quvchi: AI Repetitor (mavzuni tushuntirish, misol, tekshirish), CEFR va SAT amaliy imtihonlari, uy vazifasi, davomat, profil va to'lovlar.
+- O'qituvchi: guruhlar, davomat, uy vazifasini baholash, o'quvchilar holati, AI yordamchi (test, uy vazifasi, dars rejasi qoralamasi; tasdiqlanmaguncha chiqmaydi).
+- Admin/menejer: o'quvchilar CRM, guruhlar va dars jadvali, qabul (onlayn ariza), moliya (to'lov, xarajat, qarzdorlik, kassa), bosh panel.
+- Onlayn ariza va Telegram bog'lash mavjud.
+Kompaniya haqida (manzil, telefon, narx, ish vaqti) ma'lumot bu yerda ko'rsatilmagan; bunday savolga aniq javob bera olmasligingizni ayting va administratsiyaga murojaat qilishni tavsiya qiling."""
+
+
 @app.route("/api/ai/chat", methods=["POST"])
 @require_auth()
 def ai_chat():
@@ -1169,7 +1179,10 @@ def ai_chat():
         "content": (
             "Siz Teacher_texno platformasidagi Texno AI yordamchisisiz. "
             "Javoblarni asosan o'zbek tilida, qisqa, foydali va amaliy yozing. "
-            "Telegram/Instagram chatidagi mention assistant kabi kontekstga mos javob bering."
+            "Telegram/Instagram chatidagi mention assistant kabi kontekstga mos javob bering.\n\n"
+            "Quyidagi ma'lumot faqat shu sayt va markaz haqida. Agar savol bunga aloqasiz bo'lsa yoki "
+            "ma'lumot yo'q bo'lsa, taxmin qilmay, buni ochiq ayting.\n"
+            + SITE_INFO
         ),
     }]
     if isinstance(history, list):
