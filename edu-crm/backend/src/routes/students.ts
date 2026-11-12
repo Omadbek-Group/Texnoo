@@ -103,7 +103,7 @@ router.get('/:id', authorize(['ADMIN', 'MANAGER', 'TEACHER', 'CASHIER']), async 
   const id = Number(req.params.id);
   const student = await prisma.student.findUnique({
     where: { id },
-    include: { group: true, attendances: true, payments: true }
+    include: { group: { include: { course: true, teacher: true } }, attendances: true, payments: true }
   });
 
   if (!student) {

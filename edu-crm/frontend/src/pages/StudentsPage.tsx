@@ -48,6 +48,42 @@ export function StudentsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [profile, setProfile] = useState<any | null>(null);
+  const [payAmount, setPayAmount] = useState('');
+  const [payMethod, setPayMethod] = useState('CASH');
+  const [profileError, setProfileError] = useState('');
+
+  async function openProfile(student: Student) {
+    setProfileError('');
+    setPayAmount('');
+    try {
+      const res = await axios.get(`/api/students/${student.id}`);
+      setProfile(res.data);
+    } catch (err: any) {
+      setProfileError(err.response?.data?.error || 'Profilni yuklab bo\'lmadi.');
+    }
+  }
+
+  async function payForStudent() {
+    if (!profile || !payAmount) return;
+    setProfileError('');
+    try {
+      await axios.post('/api/payments', {
+        studentId: profile.id,
+        groupId: profile.groupId,
+        amount: Number(payAmount),
+        method: payMethod
+      });
+      setPayAmount('');
+      await openProfile(profile);
+      loadStudents();
+    } catch (err: any) {
+      setProfileError(err.response?.data?.error || 'To\'lovni saqlab bo\'lmadi.');
+    }
+  }
+
+  const paidTotal = profile?.payments?.reduce((sum: number, p: any) => sum + Number(p.amount), 0) ?? 0;
+  const monthlyFee = profile?.group?.monthlyFee ?? 0;
   const [editing, setEditing] = useState<Student | null>(null);
   const [form, setForm] = useState({
     studentId: '',
@@ -257,6 +293,7 @@ export function StudentsPage() {
                   <td>{student.status}</td>
                   <td>{student.group.course.title}</td>
                   <td>
+                    <button className="small-button" onClick={() => openProfile(student)}>Profil</button>
                     <button className="small-button" onClick={() => openEditModal(student)}>Edit</button>
                     <button className="outline-button small" onClick={() => deleteStudent(student.id)}>Delete</button>
                   </td>
@@ -270,6 +307,35 @@ export function StudentsPage() {
       </div>
 
       <Pagination page={meta.page} limit={meta.limit} total={meta.total} onPageChange={setPage} />
+
+      <Modal title="O'quvchi profili" open={!!profile} onClose={() => setProfile(null)}>
+        {profile && (
+          <div className="entity-form">
+            <p><strong>{profile.firstName} {profile.lastName}</strong> ({profile.studentId})</p>
+            <p>Fan: {profile.group?.course?.title ?? '—'}</p>
+            <p>O'qituvchi: {profile.group?.teacher?.name ?? '—'}</p>
+            <p>Guruh: {profile.group?.name ?? '—'}</p>
+            <p>Oylik to'lov: {monthlyFee} | To'langan: {paidTotal}</p>
+            <p>Qarz: {Math.max(0, monthlyFee - paidTotal)}</p>
+            <label>
+              Summa
+              <input type="number" min={0} value={payAmount} onChange={e => setPayAmount(e.target.value)} />
+            </label>
+            <label>
+              Usul
+              <select value={payMethod} onChange={e => setPayMethod(e.target.value)}>
+                <option value="CASH">Naqd</option>
+                <option value="CARD">Karta</option>
+                <option value="TRANSFER">O'tkazma</option>
+              </select>
+            </label>
+            {profileError && <div className="alert">{profileError}</div>}
+            <button type="button" className="primary-button" onClick={payForStudent} disabled={!payAmount}>
+              To'lov qilish
+            </button>
+          </div>
+        )}
+      </Modal>
 
       <Modal title={editing ? 'Edit Student' : 'Register Student'} open={modalOpen} onClose={() => setModalOpen(false)}>
         <form className="entity-form" onSubmit={submitForm}>
