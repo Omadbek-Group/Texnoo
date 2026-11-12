@@ -1,0 +1,52 @@
+{
+  "checkedAt": "2026-11-12",
+  "note": "Har bir yozuv rasmiy manbadan tekshirilgan (verified: true) yoki hali tasdiqlanmagan (verified: false). Tasdiqlanmagan ma'lumotlarni rasmiy saytdan yangilang.",
+  "entries": [
+    {
+      "id": "uzbmb-oct-2026",
+      "title": "Milliy sertifikat (umumta'lim fanlari) — oktyabr 2026",
+      "agency": "Bilim va malakalarni baholash agentligi (UZBMB, sobiq DTM)",
+      "verified": true,
+      "source": "https://gov.uz/oz/uzbmb/news/view/236085",
+      "examDates": [
+        { "subject": "Geografiya (elektron shaklda)", "date": "2026-10-23" },
+        { "subject": "Ona tili va adabiyot (o'zbek, rus, qoraqalpoq)", "date": "2026-10-24..2026-10-26" },
+        { "subject": "Tarix", "date": "2026-10-31" }
+      ],
+      "registration": "my.gov.uz orqali. Ruxsatnoma \"Mening arizalarim\" bo'limidan yuklanadi.",
+      "fee": null,
+      "feeNote": "Rasmiy xabarda to'lov va ro'yxatdan o'tish muddati ko'rsatilmagan. my.gov.uz dan tekshiring."
+    },
+    {
+      "id": "cefr-uzbek-foreign",
+      "title": "O'zbek tili — xorijiy fuqarolar uchun CEFR imtihoni",
+      "agency": "Bilim va malakalarni baholash agentligi (UZBMB)",
+      "verified": false,
+      "source": "https://lex.uz/uz/docs/-8022549",
+      "rules": [
+        { "from": "2026-03-01", "levels": ["A1", "A2", "B1"] },
+        { "from": "2027-03-01", "levels": ["B2", "C1", "C2"] }
+      ],
+      "feeNote": "Manba lex.uz qidiruv natijasidan olingan, to'liq hujjat ochilmagan. Tasdiqlang."
+    },
+    {
+      "id": "ielts-uzbekistan",
+      "title": "IELTS (Uzbekistonda)",
+      "agency": "British Council Uzbekistan",
+      "verified": false,
+      "source": "https://www.britishcouncil.uz/en/exam/ielts",
+      "examDates": [],
+      "fee": null,
+      "feeNote": "Sahifa tekshirilmadi (so'rov vaqti tugadi). Sana va narxlarni saytdan oling. Turli saytlardagi narxlar bir-biriga mos kelmaydi."
+    },
+    {
+      "id": "cefr-english-national",
+      "title": "Ingliz tili milliy sertifikati (CEFR)",
+      "agency": "Bilim va malakalarni baholash agentligi (UZBMB)",
+      "verified": false,
+      "source": "https://my.gov.uz",
+      "levels": ["B1", "B2", "C1"],
+      "feeNote": "Daraja moslashtirish qidiruv natijasidan olingan. Rasmiy ro'yxatdan tekshiring."
+    }
+  ]
+}

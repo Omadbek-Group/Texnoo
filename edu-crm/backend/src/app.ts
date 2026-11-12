@@ -16,6 +16,7 @@ import { paymentRouter } from './routes/payments';
 import { attendanceRouter } from './routes/attendance';
 import { coursesRouter } from './routes/courses';
 import { classroomsRouter } from './routes/classrooms';
+import { officialExamsRouter } from './routes/officialExams';
 import { errorHandler } from './middleware/errorHandler';
 import prisma from './lib/prisma';
 
@@ -104,6 +105,7 @@ app.use('/api/payments', paymentRouter);
 app.use('/api/attendance', attendanceRouter);
 app.use('/api/courses', coursesRouter);
 app.use('/api/classrooms', classroomsRouter);
+app.use('/api/official-exams', officialExamsRouter);
 
 // 404 for API
 app.use('/api/*', (req, res) => {
