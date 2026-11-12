@@ -18,7 +18,7 @@ interface Student {
   notes?: string;
   photoUrl?: string | null;
   status: string;
-  group: { id: number; name: string; course: { id?: number; title: string } };
+  group: { id: number; name: string; course: { id?: number; title: string }; teacher?: { name: string } };
 }
 
 interface Course {
@@ -40,6 +40,8 @@ export function StudentsPage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [courseQuery, setCourseQuery] = useState('');
+  const [teacherQuery, setTeacherQuery] = useState('');
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ page: 1, limit: 20, total: 0 });
   const [loading, setLoading] = useState(false);
@@ -66,7 +68,7 @@ export function StudentsPage() {
   useEffect(() => {
     loadStudents();
     loadLookups();
-  }, [search, statusFilter, page]);
+  }, [search, statusFilter, courseQuery, teacherQuery, page]);
 
   const filteredGroups = useMemo(() => {
     if (!selectedCourseId) return groups;
@@ -78,7 +80,7 @@ export function StudentsPage() {
     setError('');
     try {
       const response = await axios.get('/api/students', {
-        params: { q: search, status: statusFilter, page, limit: meta.limit }
+        params: { q: search, status: statusFilter, course: courseQuery, teacher: teacherQuery, page, limit: meta.limit }
       });
       const payload = unwrapListResponse<Student[]>(response);
       setStudents(payload.data);
@@ -206,6 +208,19 @@ export function StudentsPage() {
           <option value="FROZEN">Frozen</option>
           <option value="FINISHED">Finished</option>
         </select>
+      </div>
+
+      <div className="toolbar-row">
+        <input
+          placeholder="Fan bo'yicha (subject)"
+          value={courseQuery}
+          onChange={e => { setCourseQuery(e.target.value); setPage(1); }}
+        />
+        <input
+          placeholder="O'qituvchi bo'yicha (teacher)"
+          value={teacherQuery}
+          onChange={e => { setTeacherQuery(e.target.value); setPage(1); }}
+        />
       </div>
 
       {error && <div className="alert">{error}</div>}

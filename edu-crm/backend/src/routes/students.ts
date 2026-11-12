@@ -9,6 +9,8 @@ router.use(authenticate);
 router.get('/', authorize(['ADMIN', 'MANAGER', 'TEACHER', 'CASHIER']), async (req, res) => {
   const query = req.query.q ? String(req.query.q) : undefined;
   const group = req.query.group ? String(req.query.group) : undefined;
+  const course = req.query.course ? String(req.query.course) : undefined;
+  const teacher = req.query.teacher ? String(req.query.teacher) : undefined;
   const where: any = {};
 
   if (query) {
@@ -25,10 +27,19 @@ router.get('/', authorize(['ADMIN', 'MANAGER', 'TEACHER', 'CASHIER']), async (re
     where.group = { name: { contains: group, mode: 'insensitive' } };
   }
 
+  // Subject (course) and teacher filters apply through the student's group.
+  if (course || teacher) {
+    where.group = {
+      ...where.group,
+      ...(course && { course: { OR: [{ title: { contains: course, mode: 'insensitive' } }, { code: { contains: course, mode: 'insensitive' } }] } }),
+      ...(teacher && { teacher: { name: { contains: teacher, mode: 'insensitive' } } })
+    };
+  }
+
   const students = await prisma.student.findMany({
     where,
     include: {
-      group: true
+      group: { include: { course: true, teacher: true } }
     },
     orderBy: [{ updatedAt: 'desc' }]
   });
