@@ -9543,7 +9543,7 @@
         ...s,
         id: apiNum(s.id, Date.now()),
         name: s.name || 'Talaba',
-        pass: String(s.pass ?? s.password ?? '1234'),
+        pass: String(s.pass ?? s.password ?? ''),
         coins,
         coinMap,
         level: apiNum(s.level, Math.max(1, Math.floor(coins / 100) + 1)),
@@ -9557,7 +9557,7 @@
         ...t,
         id: apiNum(t.id, Date.now()),
         name: t.name || "O'qituvchi",
-        pass: String(t.pass ?? t.password ?? 'teach123'),
+        pass: String(t.pass ?? t.password ?? ''),
         subj: t.subj || t.subject || '—',
         code: t.code || t.teacherCode || ('TCH-' + (t.id || '000'))
       };
@@ -9567,7 +9567,7 @@
         ...a,
         id: apiNum(a.id, Date.now()),
         name: a.name || 'Admin',
-        pass: String(a.pass ?? a.password ?? 'admin123'),
+        pass: String(a.pass ?? a.password ?? ''),
         code: a.code || a.adminCode || ('ADM-' + (a.id || '000')),
         level: a.level || a.role || 'admin'
       };
@@ -9623,15 +9623,15 @@
       // Backend ham, localStorage ham bo'sh bo'lsa — tizim ishlashi uchun boshlang'ich demo ma'lumot
       return {
         students: [
-          { id: 1001, name: "Aliyev Vali", phone: "+998901112233", pass: "1234", coins: 45, level: 1, streak: 3, ref: "REF1001", group: "D1", teacherId: 2001, teacherIds: [2001] },
-          { id: 1002, name: "Karimova Nilufar", phone: "+998901112244", pass: "1234", coins: 80, level: 1, streak: 5, ref: "REF1002", group: "D1", teacherId: 2001, teacherIds: [2001] },
-          { id: 1003, name: "Yusupov Sardor", phone: "+998901112255", pass: "1234", coins: 20, level: 1, streak: 0, ref: "REF1003", group: "D2", teacherId: 2001, teacherIds: [2001] }
+          { id: 1001, name: "Aliyev Vali", phone: "+998901112233", pass: "", coins: 45, level: 1, streak: 3, ref: "REF1001", group: "D1", teacherId: 2001, teacherIds: [2001] },
+          { id: 1002, name: "Karimova Nilufar", phone: "+998901112244", pass: "", coins: 80, level: 1, streak: 5, ref: "REF1002", group: "D1", teacherId: 2001, teacherIds: [2001] },
+          { id: 1003, name: "Yusupov Sardor", phone: "+998901112255", pass: "", coins: 20, level: 1, streak: 0, ref: "REF1003", group: "D2", teacherId: 2001, teacherIds: [2001] }
         ],
         teachers: [
-          { id: 2001, name: "Valiyev Omadbek", subj: "IT", pass: "teach123", code: "TCH-100" }
+          { id: 2001, name: "Valiyev Omadbek", subj: "IT", pass: "", code: "TCH-100" }
         ],
         admins: [
-          { id: 3001, name: "Admin", pass: "admin123", code: "ADM-100", level: "admin" }
+          { id: 3001, name: "Admin", pass: "", code: "ADM-100", level: "admin" }
         ],
         transactions: [], adminRequests: [], messages: [], groups: [],
         chatFriends: [], chatGroups: [], pendingReqs: [],
@@ -10185,7 +10185,7 @@
     function addStud() {
       const n = document.getElementById('nsName').value.trim();
       const p = document.getElementById('nsPhone').value.trim();
-      const pass = document.getElementById('nsPass').value || '1234';
+      const pass = document.getElementById('nsPass').value || Math.random().toString(36).slice(2, 10);
       if (!n) { showToast('❗ Ism kiriting'); return; }
       const teacherId = curUser?.role === 'teacher' ? curUser.id : null;
       DB.students.push({ id: Date.now(), name: n, phone: p, pass, coins: 0, level: 1, streak: 0, ref: 'NEW' + Math.floor(Math.random() * 9000 + 1000), group: 'Yangi', teacherId, teacherIds: teacherId ? [teacherId] : [] });
@@ -10196,7 +10196,7 @@
     function addTeacher() {
       const n = document.getElementById('ntName').value.trim();
       const s = document.getElementById('ntSubj').value.trim();
-      const pass = document.getElementById('ntPass').value || 'teach123';
+      const pass = document.getElementById('ntPass').value || Math.random().toString(36).slice(2, 10);
       if (!n) { showToast('❗ Ism kiriting'); return; }
       DB.teachers.push({ id: Date.now(), name: n, subj: s || '—', pass, code: 'TCH-' + Math.floor(Math.random() * 900 + 100) });
       document.getElementById('ntName').value = ''; document.getElementById('ntSubj').value = ''; document.getElementById('ntPass').value = '';
@@ -13779,7 +13779,7 @@ let typingState = null;
         ...s,
         id: apiNum(s.id, Date.now()),
         name: s.name || 'Talaba',
-        pass: String(s.pass ?? s.password ?? '1234'),
+        pass: String(s.pass ?? s.password ?? ''),
         coins,
         coinMap,
         level: apiNum(s.level, Math.max(1, Math.floor(coins / 100) + 1)),
@@ -13793,7 +13793,7 @@ let typingState = null;
         ...t,
         id: apiNum(t.id, Date.now()),
         name: t.name || "O'qituvchi",
-        pass: String(t.pass ?? t.password ?? 'teach123'),
+        pass: String(t.pass ?? t.password ?? ''),
         subj: t.subj || t.subject || '—',
         code: t.code || t.teacherCode || ('TCH-' + (t.id || '000'))
       };
@@ -13803,7 +13803,7 @@ let typingState = null;
         ...a,
         id: apiNum(a.id, Date.now()),
         name: a.name || 'Admin',
-        pass: String(a.pass ?? a.password ?? 'admin123'),
+        pass: String(a.pass ?? a.password ?? ''),
         code: a.code || a.adminCode || ('ADM-' + (a.id || '000')),
         level: a.level || a.role || 'admin'
       };
@@ -13858,15 +13858,15 @@ let typingState = null;
       // Backend ham, localStorage ham bo'sh bo'lsa — tizim ishlashi uchun boshlang'ich demo ma'lumot
       return {
         students: [
-          { id: 1001, name: "Aliyev Vali", phone: "+998901112233", pass: "1234", coins: 45, level: 1, streak: 3, ref: "REF1001", group: "D1", teacherId: 2001, teacherIds: [2001] },
-          { id: 1002, name: "Karimova Nilufar", phone: "+998901112244", pass: "1234", coins: 80, level: 1, streak: 5, ref: "REF1002", group: "D1", teacherId: 2001, teacherIds: [2001] },
-          { id: 1003, name: "Yusupov Sardor", phone: "+998901112255", pass: "1234", coins: 20, level: 1, streak: 0, ref: "REF1003", group: "D2", teacherId: 2001, teacherIds: [2001] }
+          { id: 1001, name: "Aliyev Vali", phone: "+998901112233", pass: "", coins: 45, level: 1, streak: 3, ref: "REF1001", group: "D1", teacherId: 2001, teacherIds: [2001] },
+          { id: 1002, name: "Karimova Nilufar", phone: "+998901112244", pass: "", coins: 80, level: 1, streak: 5, ref: "REF1002", group: "D1", teacherId: 2001, teacherIds: [2001] },
+          { id: 1003, name: "Yusupov Sardor", phone: "+998901112255", pass: "", coins: 20, level: 1, streak: 0, ref: "REF1003", group: "D2", teacherId: 2001, teacherIds: [2001] }
         ],
         teachers: [
-          { id: 2001, name: "Valiyev Omadbek", subj: "IT", pass: "teach123", code: "TCH-100" }
+          { id: 2001, name: "Valiyev Omadbek", subj: "IT", pass: "", code: "TCH-100" }
         ],
         admins: [
-          { id: 3001, name: "Admin", pass: "admin123", code: "ADM-100", level: "admin" }
+          { id: 3001, name: "Admin", pass: "", code: "ADM-100", level: "admin" }
         ],
         transactions: [], adminRequests: [], messages: [], groups: [],
         chatFriends: [], chatGroups: [], pendingReqs: [],
@@ -14419,7 +14419,7 @@ let typingState = null;
     function addStud() {
       const n = document.getElementById('nsName').value.trim();
       const p = document.getElementById('nsPhone').value.trim();
-      const pass = document.getElementById('nsPass').value || '1234';
+      const pass = document.getElementById('nsPass').value || Math.random().toString(36).slice(2, 10);
       if (!n) { showToast('❗ Ism kiriting'); return; }
       const teacherId = curUser?.role === 'teacher' ? curUser.id : null;
       DB.students.push({ id: Date.now(), name: n, phone: p, pass, coins: 0, level: 1, streak: 0, ref: 'NEW' + Math.floor(Math.random() * 9000 + 1000), group: 'Yangi', teacherId, teacherIds: teacherId ? [teacherId] : [] });
@@ -14430,7 +14430,7 @@ let typingState = null;
     function addTeacher() {
       const n = document.getElementById('ntName').value.trim();
       const s = document.getElementById('ntSubj').value.trim();
-      const pass = document.getElementById('ntPass').value || 'teach123';
+      const pass = document.getElementById('ntPass').value || Math.random().toString(36).slice(2, 10);
       if (!n) { showToast('❗ Ism kiriting'); return; }
       DB.teachers.push({ id: Date.now(), name: n, subj: s || '—', pass, code: 'TCH-' + Math.floor(Math.random() * 900 + 100) });
       document.getElementById('ntName').value = ''; document.getElementById('ntSubj').value = ''; document.getElementById('ntPass').value = '';

@@ -5860,7 +5860,7 @@
         phone: s.phone || '',
         email: s.email || '',
         avatar: s.avatar || '',
-        pass: String(s.pass ?? s.password ?? '1234'),
+        pass: String(s.pass ?? s.password ?? ''),
         coins,
         coinMap,
         level: apiNum(s.level, Math.max(1, Math.floor(coins / 100) + 1)),
@@ -5879,7 +5879,7 @@
         phone: t.phone || '',
         email: t.email || '',
         avatar: t.avatar || '',
-        pass: String(t.pass ?? t.password ?? 'teach123'),
+        pass: String(t.pass ?? t.password ?? ''),
         subj: t.subj || t.subject || '—',
         code: t.code || t.teacherCode || ('TCH-' + (t.id || '000')),
         // Ro'yxatdan o'tgan yangi o'qituvchilar Platform Admin tasdig'igacha 'pending' holatda turadi.
@@ -5913,7 +5913,7 @@
         phone: a.phone || '',
         email: a.email || '',
         avatar: a.avatar || '',
-        pass: String(a.pass ?? a.password ?? 'admin123'),
+        pass: String(a.pass ?? a.password ?? ''),
         code: a.code || a.adminCode || ('ADM-' + (a.id || '000')),
         // 'school_admin' yoki 'platform_admin'. Faqat Platform Admin o'qituvchilarni tasdiqlay oladi
         // va yangi admin hisoblarini yarata oladi. Eski ma'lumotlarda level ko'rsatilmagan bo'lsa,
@@ -5994,15 +5994,15 @@
       // Backend ham, localStorage ham bo'sh bo'lsa — tizim ishlashi uchun boshlang'ich demo ma'lumot
       return {
         students: [
-          { id: 1001, name: "Aliyev Vali", phone: "+998901112233", pass: "1234", coins: 45, level: 1, streak: 3, ref: "REF1001", group: "D1", teacherId: 2001, teacherIds: [2001], courseProgress: { 9000001: { done: [9000001, 9000002, 9000003, 9000004, 9000005, 9000006, 9000007, 9000008], lastLessonId: 9000008 } } },
-          { id: 1002, name: "Karimova Nilufar", phone: "+998901112244", pass: "1234", coins: 80, level: 1, streak: 5, ref: "REF1002", group: "D1", teacherId: 2001, teacherIds: [2001] },
-          { id: 1003, name: "Yusupov Sardor", phone: "+998901112255", pass: "1234", coins: 20, level: 1, streak: 0, ref: "REF1003", group: "D2", teacherId: 2001, teacherIds: [2001] }
+          { id: 1001, name: "Aliyev Vali", phone: "+998901112233", pass: "", coins: 45, level: 1, streak: 3, ref: "REF1001", group: "D1", teacherId: 2001, teacherIds: [2001], courseProgress: { 9000001: { done: [9000001, 9000002, 9000003, 9000004, 9000005, 9000006, 9000007, 9000008], lastLessonId: 9000008 } } },
+          { id: 1002, name: "Karimova Nilufar", phone: "+998901112244", pass: "", coins: 80, level: 1, streak: 5, ref: "REF1002", group: "D1", teacherId: 2001, teacherIds: [2001] },
+          { id: 1003, name: "Yusupov Sardor", phone: "+998901112255", pass: "", coins: 20, level: 1, streak: 0, ref: "REF1003", group: "D2", teacherId: 2001, teacherIds: [2001] }
         ],
         teachers: [
-          { id: 2001, name: "Valiyev Omadbek", subj: "IT", pass: "teach123", code: "TCH-100" }
+          { id: 2001, name: "Valiyev Omadbek", subj: "IT", pass: "", code: "TCH-100" }
         ],
         admins: [
-          { id: 3001, name: "Admin", pass: "admin123", code: "ADM-100", level: "platform_admin", phone: "+998901000001", email: "admin@texnoo.uz" }
+          { id: 3001, name: "Admin", pass: "", code: "ADM-100", level: "platform_admin", phone: "+998901000001", email: "admin@texnoo.uz" }
         ],
         parents: [],
         transactions: [], adminRequests: [], messages: [], groups: [],
@@ -6736,7 +6736,7 @@
       const name = document.getElementById('naName').value.trim();
       const identifier = document.getElementById('naIdentifier').value.trim();
       const level = document.getElementById('naLevel').value;
-      const pass = document.getElementById('naPass').value || 'admin123';
+      const pass = document.getElementById('naPass').value || Math.random().toString(36).slice(2, 10);
       if (!name) { showToast('❗ Ism kiriting'); return; }
       if (!identifier) { showToast('❗ Telefon yoki email kiriting'); return; }
       const isEmail = identifier.includes('@');
@@ -7043,7 +7043,7 @@
       const n = document.getElementById('nsName').value.trim();
       const pRaw = document.getElementById('nsPhone').value.trim();
       const g = document.getElementById('nsGrp').value.trim();
-      const pass = document.getElementById('nsPass').value || '1234';
+      const pass = document.getElementById('nsPass').value || Math.random().toString(36).slice(2, 10);
       if (!n) { showToast('❗ Ism kiriting'); return; }
       if (!pRaw) { showToast('❗ Telefon raqam kiriting (majburiy)'); return; }
       if (!isValidPhone(pRaw)) { showToast('❗ Telefon raqam noto\'g\'ri. Namuna: +998901234567'); return; }
@@ -7252,7 +7252,7 @@
     function addTeacher() {
       const n = document.getElementById('ntName').value.trim();
       const s = document.getElementById('ntSubj').value.trim();
-      const pass = document.getElementById('ntPass').value || 'teach123';
+      const pass = document.getElementById('ntPass').value || Math.random().toString(36).slice(2, 10);
       if (!n) { showToast('❗ Ism kiriting'); return; }
       // Admin tomonidan qo'lda qo'shilgan o'qituvchi allaqachon tekshirilgan hisoblanadi — darhol faol.
       DB.teachers.push({ id: Date.now(), name: n, subj: s || '—', pass, code: 'TCH-' + Math.floor(Math.random() * 900 + 100), status: 'active' });
