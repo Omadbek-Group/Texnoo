@@ -32,6 +32,7 @@ interface Group {
   name: string;
   availableSeats: number;
   course: { id: number; title: string };
+  teacher?: { name: string };
 }
 
 export function StudentsPage() {
@@ -122,7 +123,12 @@ export function StudentsPage() {
       groupId: 0,
       status: 'ACTIVE'
     });
-    setSelectedCourseId(null);
+    // Yangi o'quvchi: birinchi fan va shu fandagi birinchi guruh (o'qituvchi guruhdan olinadi) avtomatik tanlanadi.
+    // Foydalanuvchi keyin ularni qo'lda o'zgartirishi mumkin.
+    const firstCourseId = courses[0]?.id ?? null;
+    const firstGroup = groups.find(g => !firstCourseId || g.course.id === firstCourseId);
+    setSelectedCourseId(firstCourseId);
+    setForm(prev => ({ ...prev, groupId: firstGroup?.id ?? 0 }));
     setModalOpen(true);
   }
 
@@ -323,6 +329,14 @@ export function StudentsPage() {
                   </option>
                 ))}
               </select>
+            </label>
+            <label>
+              Teacher
+              <input
+                value={groups.find(g => g.id === form.groupId)?.teacher?.name ?? ''}
+                placeholder="Guruhni tanlang"
+                readOnly
+              />
             </label>
             <label>
               Parent name
