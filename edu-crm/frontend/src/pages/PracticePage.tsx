@@ -49,30 +49,26 @@ export function PracticePage() {
 
   return (
     <section>
-      <h1>Mashq testi</h1>
-      <p>{subject}</p>
+      <div className="page-heading">
+        <h1>Mashq testi</h1>
+        <p className="subtitle">{subject}</p>
+      </div>
       {error && <div className="alert">{error}</div>}
 
       {questions.map((q, index) => {
         const check = result?.results.find(r => r.id === q.id);
         return (
-          <div key={q.id} className="card" style={{ marginBottom: 12 }}>
+          <div key={q.id} className="card quiz-question">
             <strong>{index + 1}. {q.text}</strong>
-            <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+            <div className="quiz-options">
               {q.options.map((option, optionIndex) => {
                 const selected = answers[q.id] === optionIndex;
-                const isRight = check && check.answer === optionIndex;
-                const isWrong = check && selected && !check.correct;
+                const isRight = !!check && check.answer === optionIndex;
+                const isWrong = !!check && selected && !check.correct;
                 return (
                   <label
                     key={optionIndex}
-                    style={{
-                      padding: '6px 10px',
-                      borderRadius: 6,
-                      border: '1px solid',
-                      borderColor: isRight ? '#16a34a' : isWrong ? '#dc2626' : 'currentColor',
-                      cursor: result ? 'default' : 'pointer'
-                    }}
+                    className={`quiz-option${selected ? ' is-selected' : ''}${isRight ? ' is-right' : ''}${isWrong ? ' is-wrong' : ''}`}
                   >
                     <input
                       type="radio"
@@ -80,7 +76,6 @@ export function PracticePage() {
                       checked={selected}
                       disabled={!!result}
                       onChange={() => setAnswers({ ...answers, [q.id]: optionIndex })}
-                      style={{ marginRight: 8 }}
                     />
                     {option}
                   </label>
@@ -92,12 +87,12 @@ export function PracticePage() {
       })}
 
       {result ? (
-        <div className="card">
+        <div className="card quiz-result">
           <p>Natija: <strong>{result.score} / {result.total}</strong></p>
-          <button type="button" onClick={reset}>Qayta boshlash</button>
+          <button type="button" className="outline-button" onClick={reset}>Qayta boshlash</button>
         </div>
       ) : (
-        <button type="button" onClick={submit} disabled={!allAnswered}>
+        <button type="button" className="primary-button" onClick={submit} disabled={!allAnswered}>
           Tekshirish
         </button>
       )}
